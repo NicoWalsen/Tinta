@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="TINTA">
+<meta name="theme-color" content="#050507">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>TINTA · Navier–Stokes en tiempo real</title>
+<style>
+  :root{
+    --accent:#21918c;
+    --txt:#e9eaef;
+    --dim:rgba(233,234,239,.52);
+    --line:rgba(233,234,239,.16);
+    --panel:rgba(8,9,14,.58);
+    --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+  html,body{height:100%;overflow:hidden;background:#050507;color:var(--txt);
+    font-family:var(--mono);touch-action:none;overscroll-behavior:none;position:fixed;inset:0;width:100%}
+  canvas#c{position:fixed;inset:0;width:100vw;height:100vh;display:block;touch-action:none}
+
+  header{position:fixed;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:flex-start;
+    padding:calc(env(safe-area-inset-top,0px) + 14px) 16px 10px;pointer-events:none;z-index:5;
+    background:linear-gradient(to bottom,rgba(5,5,7,.55),transparent)}
+  .brand h1{font-size:17px;font-weight:800;letter-spacing:.42em;line-height:1}
+  .brand h1 i{font-style:normal;color:var(--accent)}
+  .brand p{margin-top:6px;font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:var(--dim)}
+  .stats{display:flex;gap:14px;text-align:right}
+  .stats div{display:flex;flex-direction:column;align-items:flex-end}
+  .stats span{font-size:13px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--accent);transition:color .4s}
+  .stats label{font-size:8px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim);margin-top:2px}
+
+  #hint{position:fixed;left:50%;top:42%;transform:translate(-50%,-50%);z-index:4;pointer-events:none;
+    font-size:10px;letter-spacing:.3em;text-transform:uppercase;color:var(--dim);
+    padding:10px 16px;border:1px solid var(--line);border-radius:999px;background:var(--panel);
+    backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+    transition:opacity .8s;white-space:nowrap}
+  #hint.off{opacity:0}
+
+  footer{position:fixed;left:0;right:0;bottom:0;z-index:5;
+    padding:10px 12px calc(env(safe-area-inset-bottom,0px) + 12px);
+    display:flex;flex-direction:column;gap:9px;
+    background:linear-gradient(to top,rgba(5,5,7,.72),transparent)}
+  .chips{display:flex;gap:7px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
+  .chips::-webkit-scrollbar{display:none}
+  .chip{flex:0 0 auto;display:flex;align-items:center;gap:7px;padding:8px 12px;border-radius:999px;
+    border:1px solid var(--line);background:var(--panel);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+    color:var(--dim);font-family:var(--mono);font-size:9px;letter-spacing:.16em;text-transform:uppercase;cursor:pointer}
+  .chip b{display:block;width:26px;height:8px;border-radius:4px;font-weight:400}
+  .chip.on{color:var(--txt);border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+  .row2{display:flex;gap:7px}
+  .row2 button{flex:1;padding:10px 0;border-radius:10px;border:1px solid var(--line);
+    background:var(--panel);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+    color:var(--txt);font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;cursor:pointer}
+  .row2 button:active{background:rgba(255,255,255,.08)}
+  .row2 button.on{color:var(--txt);border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+  #panel{display:flex;flex-direction:column;gap:10px;padding:13px 14px;border:1px solid var(--line);
+    border-radius:14px;background:var(--panel);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+  #panel[hidden]{display:none}
+  .ctl{display:flex;align-items:center;gap:10px}
+  .ctl label{flex:0 0 92px;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+  .ctl output{flex:0 0 44px;text-align:right;font-size:11px;font-variant-numeric:tabular-nums;color:var(--accent)}
+  .ctl input[type=range]{flex:1;accent-color:var(--accent);height:24px}
+
+  @media (prefers-reduced-motion: reduce){ #hint{transition:none} }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<header>
+  <div class="brand">
+    <h1>TINT<i>A</i></h1>
+    <p>Navier–Stokes · audio generativo · 0 librerías</p>
+  </div>
+  <div class="stats">
+    <div><span id="sFps">--</span><label>fps</label></div>
+    <div><span id="sGrid">--</span><label>rejilla</label></div>
+    <div><span id="sEn">--</span><label>energía</label></div>
+  </div>
+</header>
+
+<div id="hint">desliza el dedo · inyecta tinta</div>
+
+<footer>
+  <div id="panel" hidden>
+    <div class="ctl"><label>vorticidad</label><input id="rVort" type="range" min="0" max="6" step="0.1" value="2.6"><output id="oVort">2.6</output></div>
+    <div class="ctl"><label>persistencia</label><input id="rDiss" type="range" min="0" max="100" step="1" value="76"><output id="oDiss">.988</output></div>
+    <div class="ctl"><label>pincel</label><input id="rRad" type="range" min="40" max="220" step="5" value="100"><output id="oRad">1.0×</output></div>
+  </div>
+  <div class="chips" id="chips"></div>
+  <div class="row2">
+    <button id="bTune">ajustes</button>
+    <button id="bSound">sonido</button>
+    <button id="bGrav">gravedad</button>
+    <button id="bDemo" class="on">demo</button>
+    <button id="bClear">limpiar</button>
+  </div>
+</footer>
+
+<script>
+"use strict";
+/* ============================================================
+   TINTA — solver "Stable Fluids" (Jos Stam, SIGGRAPH 1999)
+   rejilla rectangular + confinamiento de vorticidad
+   sin dependencias · Float32Array · 60 fps en móvil
+   ============================================================ */
+
+/* ---------- colormaps de matplotlib (anclas hex) ---------- */
+const PALETTES = {
+  viridis:['#440154','#472d7b','#3b528b','#2c728e','#21918c','#28ae80','#5ec962','#addc30','#fde725'],
+  magma:  ['#000004','#180f3e','#451077','#721f81','#9f2f7f','#cd4071','#f1605d','#fd9567','#fcfdbf'],
+  plasma: ['#0d0887','#41049d','#6a00a8','#8f0da4','#b12a90','#cc4778','#e16462','#f2844b','#fca636','#fcce25','#f0f921'],
+  inferno:['#000004','#1b0c42','#4b0c6b','#781c6d','#a52c60','#cf4446','#ed6925','#fb9a06','#f7d03c','#fcffa4'],
+  turbo:  ['#30123b','#4145ab','#4675ed','#39a2fc','#1bcfd4','#24eca6','#61fc6c','#a4fc3b','#d1e834','#f3c63a','#fe9b2d','#f36315','#d93806','#b11901','#7a0403']
+};
+let paletteName = 'viridis';
+let LUT = new Uint32Array(256);
+let accentHex = '#21918c';
+
+function hex2rgb(h){const n=parseInt(h.slice(1),16);return [(n>>16)&255,(n>>8)&255,n&255];}
+function buildLUT(name){
+  const stops = PALETTES[name].map(hex2rgb);
+  const m = stops.length-1;
+  for(let i=0;i<256;i++){
+    const t=i/255*m, s=Math.min(m-1,Math.floor(t)), f=t-s;
+    const a=stops[s], b=stops[s+1];
+    const r=(a[0]+(b[0]-a[0])*f)|0, g=(a[1]+(b[1]-a[1])*f)|0, bl=(a[2]+(b[2]-a[2])*f)|0;
+    LUT[i]=(255<<24)|(bl<<16)|(g<<8)|r;            // ABGR little-endian
+  }
+  accentHex = PALETTES[name][Math.round((PALETTES[name].length-1)*0.72)];
+  document.documentElement.style.setProperty('--accent',accentHex);
+}
+
+/* ---------- estado de la simulación ---------- */
+let NX=0, NY=0, W=0, size=0;
+let u,v,u0,v0,dens,dens0,curl;
+const ITER = 8;                 // iteraciones Gauss–Seidel (presión)
+let dt = 1/60;
+let VORT = 2.6;                 // ε confinamiento de vorticidad
+let DISS = 0.988;               // factor de desvanecimiento de tinta
+let RADF = 1.0;                 // multiplicador del pincel
+const VEL_DAMP = 0.999;
+
+const IX=(i,j)=>i+W*j;
+
+function allocGrid(cw,ch){
+  const aspect = cw/ch, budget = 21000;
+  NX = Math.max(48, Math.round(Math.sqrt(budget*aspect)));
+  NY = Math.max(48, Math.round(NX/aspect));
+  W = NX+2; size = W*(NY+2);
+  u=new Float32Array(size); v=new Float32Array(size);
+  u0=new Float32Array(size); v0=new Float32Array(size);
+  dens=new Float32Array(size); dens0=new Float32Array(size);
+  curl=new Float32Array(size);
+  off.width=NX; off.height=NY;
+  img = octx.createImageData(NX,NY);
+  buf32 = new Uint32Array(img.data.buffer);
+  sGrid.textContent = NX+'×'+NY;
+}
+
+/* ---------- núcleo numérico ---------- */
+function set_bnd(b,x){
+  for(let i=1;i<=NX;i++){
+    x[IX(i,0)]    = b===2 ? -x[IX(i,1)]  : x[IX(i,1)];
+    x[IX(i,NY+1)] = b===2 ? -x[IX(i,NY)] : x[IX(i,NY)];
+  }
+  for(let j=1;j<=NY;j++){
+    x[IX(0,j)]    = b===1 ? -x[IX(1,j)]  : x[IX(1,j)];
+    x[IX(NX+1,j)] = b===1 ? -x[IX(NX,j)] : x[IX(NX,j)];
+  }
+  x[IX(0,0)]       = .5*(x[IX(1,0)]+x[IX(0,1)]);
+  x[IX(0,NY+1)]    = .5*(x[IX(1,NY+1)]+x[IX(0,NY)]);
+  x[IX(NX+1,0)]    = .5*(x[IX(NX,0)]+x[IX(NX+1,1)]);
+  x[IX(NX+1,NY+1)] = .5*(x[IX(NX,NY+1)]+x[IX(NX+1,NY)]);
+}
+
+function lin_solve(b,x,x0,a,c){
+  const inv=1/c;
+  for(let k=0;k<ITER;k++){
+    for(let j=1;j<=NY;j++){
+      let idx=IX(1,j);
+      for(let i=1;i<=NX;i++,idx++){
+        x[idx]=(x0[idx]+a*(x[idx-1]+x[idx+1]+x[idx-W]+x[idx+W]))*inv;
+      }
+    }
+    set_bnd(b,x);
+  }
+}
+
+/* advección semi-lagrangiana con interpolación bilineal */
+function advect(b,d,d0,uu,vv){
+  const dtx=dt*NX, dty=dt*NY;
+  for(let j=1;j<=NY;j++){
+    let k=IX(1,j);
+    for(let i=1;i<=NX;i++,k++){
+      let x=i-dtx*uu[k], y=j-dty*vv[k];
+      if(x<0.5)x=0.5; else if(x>NX+0.5)x=NX+0.5;
+      if(y<0.5)y=0.5; else if(y>NY+0.5)y=NY+0.5;
+      const i0=x|0, j0=y|0;
+      const s1=x-i0, s0=1-s1, t1=y-j0, t0=1-t1;
+      const A=IX(i0,j0);
+      d[k]= s0*(t0*d0[A]      + t1*d0[A+W]) +
+            s1*(t0*d0[A+1]    + t1*d0[A+1+W]);
+    }
+  }
+  set_bnd(b,d);
+}
+
+/* proyección: fuerza ∇·u = 0 (incompresibilidad) */
+function project(uu,vv,p,div){
+  const hx=1/NX, hy=1/NY;
+  for(let j=1;j<=NY;j++){
+    let k=IX(1,j);
+    for(let i=1;i<=NX;i++,k++){
+      div[k]=-0.5*( hx*(uu[k+1]-uu[k-1]) + hy*(vv[k+W]-vv[k-W]) );
+      p[k]=0;
+    }
+  }
+  set_bnd(0,div); set_bnd(0,p);
+  lin_solve(0,p,div,1,4);
+  for(let j=1;j<=NY;j++){
+    let k=IX(1,j);
+    for(let i=1;i<=NX;i++,k++){
+      uu[k]-=0.5*(p[k+1]-p[k-1])/hx;
+      vv[k]-=0.5*(p[k+W]-p[k-W])/hy;
+    }
+  }
+  set_bnd(1,uu); set_bnd(2,vv);
+}
+
+/* confinamiento de vorticidad: reinyecta los remolinos
+   que la difusión numérica disipa (Fedkiw et al. 2001) */
+function vorticity(){
+  for(let j=1;j<=NY;j++){
+    let k=IX(1,j);
+    for(let i=1;i<=NX;i++,k++){
+      curl[k]=0.5*((v[k+1]-v[k-1])-(u[k+W]-u[k-W]));
+    }
+  }
+  const eps=VORT;
+  for(let j=2;j<NY;j++){
+    let k=IX(2,j);
+    for(let i=2;i<NX;i++,k++){
+      const dwdx=0.5*(Math.abs(curl[k+1])-Math.abs(curl[k-1]));
+      const dwdy=0.5*(Math.abs(curl[k+W])-Math.abs(curl[k-W]));
+      const len=Math.sqrt(dwdx*dwdx+dwdy*dwdy)+1e-5;
+      const w=curl[k];
+      u[k]+= eps*dt*( dwdy/len)*w;
+      v[k]+= eps*dt*(-dwdx/len)*w;
+    }
+  }
+}
+
+function step(){
+  if(gravOn && (gravX!==0||gravY!==0)){      // la tinta "pesa": cae hacia el suelo real
+    const fx=GRAV*gravX*dt, fy=GRAV*gravY*dt;
+    for(let j=1;j<=NY;j++){
+      let k=IX(1,j);
+      for(let i=1;i<=NX;i++,k++){
+        const d=dens[k];
+        if(d>0.004){ u[k]+=fx*d; v[k]+=fy*d; }
+      }
+    }
+  }
+  if(VORT>0) vorticity();
+  project(u,v,u0,v0);
+  u0.set(u); v0.set(v);
+  advect(1,u,u0,u0,v0);
+  advect(2,v,v0,u0,v0);
+  project(u,v,u0,v0);
+  dens0.set(dens);
+  advect(0,dens,dens0,u,v);
+  for(let k=0;k<size;k++){ dens[k]*=DISS; u[k]*=VEL_DAMP; v[k]*=VEL_DAMP; }
+}
+
+/* ---------- inyección (splat gaussiano) ---------- */
+function splat(gx,gy,du,dv,amount){
+  const r = Math.max(2, Math.min(NX,NY)*0.05*RADF);
+  const r2=r*r;
+  const i0=Math.max(1,(gx-r)|0), i1=Math.min(NX,Math.ceil(gx+r));
+  const j0=Math.max(1,(gy-r)|0), j1=Math.min(NY,Math.ceil(gy+r));
+  for(let j=j0;j<=j1;j++){
+    for(let i=i0;i<=i1;i++){
+      const dx=i-gx, dy=j-gy, d2=dx*dx+dy*dy;
+      if(d2>r2)continue;
+      const wgt=Math.exp(-d2/(r2*0.42));
+      const k=IX(i,j);
+      u[k]+=du*wgt; v[k]+=dv*wgt;
+      let nd=dens[k]+amount*wgt;
+      dens[k]= nd>1.55 ? 1.55 : nd;
+    }
+  }
+}
+
+/* ---------- lienzo y render ---------- */
+const canvas=document.getElementById('c');
+const ctx=canvas.getContext('2d');
+const off=document.createElement('canvas');
+const octx=off.getContext('2d');
+let img, buf32, cssW=1, cssH=1;
+
+function resize(){
+  cssW=window.innerWidth; cssH=window.innerHeight;
+  const dpr=Math.min(2,window.devicePixelRatio||1);
+  canvas.width=Math.round(cssW*dpr);
+  canvas.height=Math.round(cssH*dpr);
+  allocGrid(cssW,cssH);
+}
+let rT=null;
+window.addEventListener('resize',()=>{clearTimeout(rT);rT=setTimeout(resize,250);});
+
+function render(){
+  let p=0;
+  for(let j=1;j<=NY;j++){
+    let k=IX(1,j);
+    for(let i=1;i<=NX;i++,k++,p++){
+      let d=dens[k];
+      buf32[p]=LUT[ d>=1?255 : d<=0?0 : (d*255)|0 ];
+    }
+  }
+  octx.putImageData(img,0,0);
+  ctx.imageSmoothingEnabled=true;
+  ctx.imageSmoothingQuality='high';
+  ctx.drawImage(off,0,0,canvas.width,canvas.height);
+}
+
+/* ---------- entrada táctil / puntero ---------- */
+const pointers=new Map();
+let lastTouchT=-1e9;
+const hint=document.getElementById('hint');
+
+function toGrid(e){ return [ e.clientX/cssW*NX, e.clientY/cssH*NY ]; }
+
+canvas.addEventListener('pointerdown',e=>{
+  e.preventDefault();
+  canvas.setPointerCapture(e.pointerId);
+  const [gx,gy]=toGrid(e);
+  pointers.set(e.pointerId,{gx,gy});
+  splat(gx,gy,0,0,0.9);
+  lastTouchT=performance.now();
+  hint.classList.add('off');
+});
+canvas.addEventListener('pointermove',e=>{
+  const p=pointers.get(e.pointerId);
+  if(!p)return;
+  e.preventDefault();
+  const [gx,gy]=toGrid(e);
+  const du=(gx-p.gx)/NX*9.0/Math.max(dt,1/120);
+  const dv=(gy-p.gy)/NY*9.0/Math.max(dt,1/120);
+  /* limitar para estabilidad */
+  const cap=22;
+  splat(gx,gy, Math.max(-cap,Math.min(cap,du*dt*60))*0.16,
+               Math.max(-cap,Math.min(cap,dv*dt*60))*0.16, 0.55);
+  if(audioOn && performance.now()-lastNoteT>110){
+    lastNoteT=performance.now();
+    touchNote(gy, Math.hypot(gx-p.gx,gy-p.gy));
+  }
+  p.gx=gx; p.gy=gy;
+  lastTouchT=performance.now();
+});
+function lift(e){ pointers.delete(e.pointerId); lastTouchT=performance.now(); }
+canvas.addEventListener('pointerup',lift);
+canvas.addEventListener('pointercancel',lift);
+document.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
+
+/* ---------- modo demo (emisores Lissajous) ---------- */
+const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+let demoOn=!reduced;
+let demoT=0;
+function demo(){
+  if(!demoOn) return;
+  if(performance.now()-lastTouchT < 3500) return;   // cede al usuario
+  demoT+=dt;
+  for(const [f1,f2,ph,sgn] of [[0.62,1.05,0.0,1],[0.91,0.57,2.1,-1]]){
+    const ax=0.30*NX, ay=0.30*NY;
+    const gx=NX*0.5+ax*Math.sin(f1*demoT+ph);
+    const gy=NY*0.5+ay*Math.sin(f2*demoT+ph*1.7);
+    const du=(ax*f1*Math.cos(f1*demoT+ph))/NX*1.6*sgn;
+    const dv=(ay*f2*Math.cos(f2*demoT+ph*1.7))/NY*1.6*sgn;
+    splat(gx,gy,du,dv,0.16);
+  }
+}
+
+/* ---------- lecturas (instrumentación) ---------- */
+const sFps=document.getElementById('sFps');
+const sGrid=document.getElementById('sGrid');
+const sEn=document.getElementById('sEn');
+let fpsEMA=60, frame=0, lastStats=0;
+
+function stats(now){
+  frame++;
+  if(now-lastStats<280) return;
+  lastStats=now;
+  sFps.textContent=Math.round(fpsEMA);
+  let E=0;
+  for(let k=0;k<size;k+=3) E+=u[k]*u[k]+v[k]*v[k];
+  const e=E*3/size*1000;
+  sEn.textContent=e.toFixed(1);
+  eMax=Math.max(e,eMax*0.997,0.5);              // auto-escala de energía
+  eNorm+=(Math.min(1,e/eMax)-eNorm)*0.25;
+  let m=0,my=0;                                  // centroide vertical de tinta
+  for(let j=1;j<=NY;j+=2){
+    let k=IX(1,j);
+    for(let i=1;i<=NX;i+=2,k+=2){const d=dens[k];m+=d;my+=d*j;}
+  }
+  dyeCentroid = m>1e-3 ? my/(m*NY) : 0.5;
+  if(audioOn){                                   // el fluido modula el pad
+    padFilter.frequency.setTargetAtTime(140+2400*eNorm*eNorm,ac.currentTime,0.25);
+    padGain.gain.setTargetAtTime(0.035+0.08*eNorm,ac.currentTime,0.3);
+  }
+}
+
+/* ---------- audio generativo (Web Audio, síntesis pura) ----------
+   Sin samples, sin archivos, sin copyright: todo se sintetiza.
+   Mapeos fluido→música:
+     energía cinética  → brillo del filtro + densidad de notas
+     centroide de tinta→ registro (tinta arriba = notas agudas)
+     dedo              → dispara notas cuantizadas a la escala     */
+let ac=null, audioOn=false, schedTimer=null;
+let master,comp,verb,padFilter,padGain;
+const padOscs=[];
+let nextStep=0, stepIdx=0, lastNoteT=0;
+let eNorm=0, eMax=0.5, dyeCentroid=0.5;
+const STEP=0.24;                              // 1 paso = corchea a ~125 bpm
+
+const SCALES={                                // una tonalidad por paleta
+  viridis:{root:48,steps:[0,3,5,7,10]},       // do pent. menor
+  magma:  {root:50,steps:[0,2,3,7,9]},        // re kumoi (japonesa)
+  plasma: {root:45,steps:[0,2,4,7,9]},        // la pent. mayor
+  inferno:{root:47,steps:[0,1,5,7,10]},       // si insen (oscura)
+  turbo:  {root:43,steps:[0,2,5,7,10]}        // sol mixolidia pent.
+};
+const mtof=m=>440*Math.pow(2,(m-69)/12);
+
+function makeImpulse(sec,decay){              // reverb procedural
+  const rate=ac.sampleRate, len=(rate*sec)|0;
+  const imp=ac.createBuffer(2,len,rate);
+  for(let c=0;c<2;c++){
+    const ch=imp.getChannelData(c);
+    for(let i=0;i<len;i++) ch[i]=(Math.random()*2-1)*Math.pow(1-i/len,decay);
+  }
+  return imp;
+}
+
+function initAudio(){
+  ac=new (window.AudioContext||window.webkitAudioContext)();
+  comp=ac.createDynamicsCompressor();
+  comp.threshold.value=-20; comp.knee.value=18; comp.ratio.value=7;
+  master=ac.createGain(); master.gain.value=0;
+  master.connect(comp); comp.connect(ac.destination);
+  verb=ac.createConvolver(); verb.buffer=makeImpulse(2.6,2.8);
+  const vg=ac.createGain(); vg.gain.value=0.55;
+  verb.connect(vg); vg.connect(master);
+  /* pad: dos sierras desafinadas tras un paso-bajo */
+  padFilter=ac.createBiquadFilter(); padFilter.type='lowpass';
+  padFilter.frequency.value=200; padFilter.Q.value=0.7;
+  padGain=ac.createGain(); padGain.gain.value=0.04;
+  padFilter.connect(padGain); padGain.connect(master); padGain.connect(verb);
+  for(const det of [-7,6]){
+    const o=ac.createOscillator(); o.type='sawtooth';
+    o.frequency.value=mtof(SCALES[paletteName].root-12);
+    o.detune.value=det;
+    o.connect(padFilter); o.start();
+    padOscs.push(o);
+  }
+}
+
+function pluck(midi,vel,when,dur){
+  const o=ac.createOscillator(); o.type='triangle';
+  o.frequency.value=mtof(midi);
+  const g=ac.createGain();
+  g.gain.setValueAtTime(0.0001,when);
+  g.gain.linearRampToValueAtTime(vel,when+0.014);
+  g.gain.exponentialRampToValueAtTime(0.0004,when+dur);
+  o.connect(g); g.connect(master); g.connect(verb);
+  o.start(when); o.stop(when+dur+0.06);
+}
+
+function scheduleStep(t,s){
+  const sc=SCALES[paletteName], L=sc.steps.length;
+  if(s%16===0) pluck(sc.root-12, 0.15+0.12*eNorm, t, 2.2);   // bajo, 1/compás
+  if(s%8===4)  pluck(sc.root+sc.steps[3], 0.07+0.07*eNorm, t, 1.4);
+  if(Math.random() < 0.08+0.78*eNorm){                       // arpa probabilística
+    const deg=sc.steps[(Math.random()*L)|0];
+    const high=1-dyeCentroid;                                // tinta arriba → agudos
+    const oct= Math.random()<high ? (Math.random()<high?24:12)
+                                  : (Math.random()<0.5?12:0);
+    pluck(sc.root+12+deg+oct, 0.05+0.14*eNorm+0.05*Math.random(),
+          t, 0.5+Math.random());
+  }
+}
+
+function scheduler(){                          // reloj con lookahead
+  while(nextStep < ac.currentTime+0.16){
+    scheduleStep(nextStep,stepIdx);
+    nextStep+=STEP; stepIdx=(stepIdx+1)&15;
+  }
+}
+
+function touchNote(gy,speed){                  // el dedo es un instrumento
+  const sc=SCALES[paletteName], L=sc.steps.length;
+  let idx=((1-gy/NY)*(L*2))|0;
+  if(idx<0)idx=0; else if(idx>L*2-1)idx=L*2-1;
+  const midi=sc.root+12+sc.steps[idx%L]+12*((idx/L)|0);
+  pluck(midi, Math.min(0.28,0.08+speed*0.03), ac.currentTime, 0.8);
+}
+
+/* ---------- gravedad real (giroscopio + acelerómetro) ----------
+   deviceorientation entrega β (frente-atrás) y γ (izq-der) en grados.
+   Proyección del vector gravedad terrestre al plano de la pantalla:
+     fx = sin(γ)·cos(β)        fy = sin(β)
+   Verificación: vertical (β=90°,γ=0) → fy=1, la tinta cae al borde
+   inferior; plano sobre la mesa (β=γ=0) → fuerza nula.            */
+let gravOn=false, gravX=0, gravY=0, gravSeen=false, lastShake=0;
+const GRAV=3.2;
+
+function onOrient(e){
+  if(e.beta==null) return;
+  gravSeen=true;
+  const b=e.beta*Math.PI/180, g=e.gamma*Math.PI/180;
+  const fx=Math.sin(g)*Math.cos(b), fy=Math.sin(b);
+  const a=(((screen.orientation&&screen.orientation.angle)||window.orientation||0))*Math.PI/180;
+  gravX= fx*Math.cos(a)+fy*Math.sin(a);     // corrige rotación de pantalla
+  gravY=-fx*Math.sin(a)+fy*Math.cos(a);
+}
+
+function onMotion(e){                        // agitar = revolver la tinta
+  const acc=e.acceleration;
+  if(!acc||acc.x==null) return;
+  const mag=Math.hypot(acc.x,acc.y,acc.z||0);
+  const now=performance.now();
+  if(mag>16 && now-lastShake>900){
+    lastShake=now;
+    for(let n=0;n<6;n++){
+      const gx=1+Math.random()*NX, gy=1+Math.random()*NY;
+      const an=Math.random()*6.2832;
+      splat(gx,gy,Math.cos(an)*1.4,Math.sin(an)*1.4,0.5);
+    }
+  }
+}
+
+async function enableGravity(){
+  try{
+    /* iOS 13+: el permiso DEBE pedirse dentro de un gesto del usuario */
+    if(typeof DeviceOrientationEvent!=='undefined' &&
+       typeof DeviceOrientationEvent.requestPermission==='function'){
+      const r=await DeviceOrientationEvent.requestPermission();
+      if(r!=='granted'){ bGrav.textContent='sin permiso'; return; }
+      if(typeof DeviceMotionEvent!=='undefined' &&
+         typeof DeviceMotionEvent.requestPermission==='function'){
+        try{ await DeviceMotionEvent.requestPermission(); }catch(_){}
+      }
+    }
+    gravSeen=false;
+    window.addEventListener('deviceorientation',onOrient);
+    window.addEventListener('devicemotion',onMotion);
+    gravOn=true; bGrav.classList.add('on');
+    setTimeout(()=>{                         // sin lecturas = sin sensor
+      if(!gravSeen){
+        gravOn=false; bGrav.classList.remove('on');
+        bGrav.textContent='sin sensor';
+      }
+    },1600);
+  }catch(_){ bGrav.textContent='sin sensor'; }
+}
+
+/* ---------- bucle principal ---------- */
+let prev=performance.now();
+function loop(now){
+  let raw=(now-prev)/1000; prev=now;
+  if(raw>0.05)raw=0.05;
+  dt=raw;
+  fpsEMA+= (1/Math.max(raw,1e-4)-fpsEMA)*0.06;
+  demo();
+  step();
+  render();
+  stats(now);
+  requestAnimationFrame(loop);
+}
+
+/* ---------- UI ---------- */
+const chips=document.getElementById('chips');
+for(const name of Object.keys(PALETTES)){
+  const b=document.createElement('button');
+  b.className='chip'+(name===paletteName?' on':'');
+  const sw=document.createElement('b');
+  sw.style.background='linear-gradient(90deg,'+PALETTES[name].join(',')+')';
+  b.append(sw,document.createTextNode(name));
+  b.onclick=()=>{
+    paletteName=name; buildLUT(name);
+    if(ac){
+      const f=mtof(SCALES[name].root-12);
+      for(const o of padOscs) o.frequency.setTargetAtTime(f,ac.currentTime,0.4);
+    }
+    chips.querySelectorAll('.chip').forEach(c=>c.classList.remove('on'));
+    b.classList.add('on');
+  };
+  chips.appendChild(b);
+}
+
+const panel=document.getElementById('panel');
+const bTune=document.getElementById('bTune');
+bTune.onclick=()=>{panel.hidden=!panel.hidden;bTune.classList.toggle('on',!panel.hidden);};
+document.getElementById('bClear').onclick=()=>{u.fill(0);v.fill(0);dens.fill(0);};
+const bGrav=document.getElementById('bGrav');
+bGrav.onclick=()=>{
+  if(gravOn){
+    gravOn=false; bGrav.classList.remove('on');
+    window.removeEventListener('deviceorientation',onOrient);
+    window.removeEventListener('devicemotion',onMotion);
+    gravX=gravY=0;
+  } else enableGravity();
+};
+const bSound=document.getElementById('bSound');
+bSound.onclick=async()=>{
+  if(!ac) initAudio();                       // iOS exige gesto del usuario
+  if(ac.state==='suspended') await ac.resume();
+  audioOn=!audioOn;
+  if(audioOn){
+    master.gain.setTargetAtTime(0.9,ac.currentTime,0.4);
+    nextStep=ac.currentTime+0.1; stepIdx=0;
+    schedTimer=setInterval(scheduler,30);
+  }else{
+    master.gain.setTargetAtTime(0,ac.currentTime,0.15);
+    clearInterval(schedTimer);
+  }
+  bSound.classList.toggle('on',audioOn);
+};
+const bDemo=document.getElementById('bDemo');
+bDemo.classList.toggle('on',demoOn);
+bDemo.onclick=()=>{demoOn=!demoOn;bDemo.classList.toggle('on',demoOn);};
+
+const rVort=document.getElementById('rVort'), oVort=document.getElementById('oVort');
+rVort.oninput=()=>{VORT=+rVort.value;oVort.textContent=VORT.toFixed(1);};
+const rDiss=document.getElementById('rDiss'), oDiss=document.getElementById('oDiss');
+rDiss.oninput=()=>{DISS=0.95+(+rDiss.value/100)*0.05;oDiss.textContent=DISS.toFixed(3).slice(1);};
+const rRad=document.getElementById('rRad'), oRad=document.getElementById('oRad');
+rRad.oninput=()=>{RADF=+rRad.value/100;oRad.textContent=RADF.toFixed(1)+'×';};
+
+/* ---------- arranque ---------- */
+buildLUT(paletteName);
+resize();
+if(reduced){ demoOn=false; bDemo.classList.remove('on'); }
+requestAnimationFrame(loop);
+
+/* ---------- PWA: funciona sin internet una vez instalada ---------- */
+if('serviceWorker' in navigator && location.protocol.indexOf('http')===0){
+  navigator.serviceWorker.register('./sw.js').catch(()=>{});
+}
+</script>
+</body>
+</html>
