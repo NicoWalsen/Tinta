@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Asfalto GT">
+<meta name="theme-color" content="#0e1013">
+<meta name="description" content="Juego de carreras 3D para iPhone: física realista, 5 rivales y un circuito de 3,27 km.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>Asfalto GT</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,500;0,600;0,700;1,700;1,800&family=Barlow:wght@500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<!--APP-->
+<canvas id="gl"></canvas>
+
+<div id="hud" hidden>
+  <div class="hud-tl">
+    <div class="posbox">
+      <span class="lbl">POS</span>
+      <span class="pos"><b id="hPos">5</b><small id="hCars">/6</small></span>
+    </div>
+    <div class="lapbox"><span class="lbl">VUELTA</span> <b id="hLap">1</b><small>/<span id="hLaps">3</span></small></div>
+    <ol id="tower" aria-label="Clasificación"></ol>
+  </div>
+  <div class="hud-tc">
+    <div class="laptime" id="hTime">0:00.000</div>
+    <div class="best"><span class="lbl">MEJOR</span> <b id="hBest">--:--.---</b></div>
+    <div id="hLast" class="last"></div>
+  </div>
+  <div class="hud-tr">
+    <div class="btnrow">
+      <button id="bCam" class="hbtn" aria-label="Cambiar cámara">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-2.5h6L17 8h3v11H4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="13.2" r="3.4" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+      </button>
+      <button id="bReset" class="hbtn" aria-label="Volver a la pista">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 12a6.5 6.5 0 1 0 2-4.7" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><path d="M5 4.5v4h4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <button id="bPause" class="hbtn" aria-label="Pausa">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6.5" y="5" width="3.6" height="14" rx="1" fill="currentColor"/><rect x="13.9" y="5" width="3.6" height="14" rx="1" fill="currentColor"/></svg>
+      </button>
+    </div>
+    <canvas id="minimap" aria-hidden="true"></canvas>
+  </div>
+  <div class="hud-bc">
+    <div class="rpm" id="hRpm" aria-hidden="true"></div>
+    <div class="speedrow">
+      <span class="speed" id="hSpeed">0</span>
+      <span class="unit">KM/H</span>
+      <span class="gear"><span class="lbl">MARCHA</span><b id="hGear">N</b></span>
+    </div>
+  </div>
+  <div id="msg" class="msg" aria-live="polite"></div>
+  <div id="toast" class="toast" aria-live="polite"></div>
+</div>
+
+<div id="controls" data-mode="botones" hidden>
+  <div class="steer" data-ctl="steer">
+    <div class="arrows">
+      <button class="ctl arrow" data-ctl="left" aria-label="Girar a la izquierda">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <button class="ctl arrow" data-ctl="right" aria-label="Girar a la derecha">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
+    <div class="hint slidehint">Desliza el dedo a los lados para girar</div>
+    <div class="hint tilthint">Inclina el iPhone como un volante</div>
+  </div>
+  <div class="pedals">
+    <button class="ctl hand" data-ctl="hand">Freno de mano</button>
+    <button class="ctl pedal brake" data-ctl="brake" aria-label="Freno"><span>FRENO</span></button>
+    <button class="ctl pedal gas" data-ctl="gas" aria-label="Acelerador"><span>ACELERAR</span></button>
+  </div>
+</div>
+
+<section id="menu" class="screen" hidden>
+  <div class="menu-panel">
+    <div class="menu-main">
+      <h1 class="title"><span>ASFALTO</span> <em>GT</em></h1>
+      <div class="curbline" aria-hidden="true"></div>
+      <p class="circuit"><b>Circuito del Valle</b> · 3,27 km · 6 autos</p>
+      <button id="bStart" class="cta">CORRER</button>
+      <p class="record">Récord de vuelta <b id="mRecord">--:--.---</b></p>
+      <p class="note" id="mNote" hidden></p>
+      <p class="tip">Para jugar a pantalla completa: en Safari toca <b>Compartir</b> → <b>Agregar a inicio</b>.</p>
+    </div>
+    <div class="menu-opts">
+      <div class="opt"><span class="k">Control</span>
+        <div class="seg" data-opt="control">
+          <button data-v="botones">Botones</button><button data-v="deslizar">Deslizar</button><button data-v="inclinar">Inclinar</button>
+        </div></div>
+      <div class="opt"><span class="k">Vueltas</span>
+        <div class="seg" data-opt="laps">
+          <button data-v="1">1</button><button data-v="3">3</button><button data-v="5">5</button>
+        </div></div>
+      <div class="opt"><span class="k">Rivales</span>
+        <div class="seg" data-opt="difficulty">
+          <button data-v="facil">Fácil</button><button data-v="normal">Normal</button><button data-v="pro">Pro</button>
+        </div></div>
+      <div class="opt"><span class="k">Color</span>
+        <div class="swatches" id="swatches"></div></div>
+      <div class="opt"><span class="k">Calidad</span>
+        <div class="seg" data-opt="quality">
+          <button data-v="auto">Auto</button><button data-v="alta">Alta</button><button data-v="media">Media</button><button data-v="baja">Baja</button>
+        </div></div>
+      <div class="opt"><span class="k">Ayudas</span>
+        <div class="seg" data-opt="assists">
+          <button data-v="true">ABS · TC · ESC</button><button data-v="false">Sin ayudas</button>
+        </div></div>
+      <div class="opt"><span class="k">Sonido</span>
+        <div class="seg" data-opt="sound">
+          <button data-v="true">Sí</button><button data-v="false">No</button>
+        </div></div>
+    </div>
+  </div>
+</section>
+
+<section id="pause" class="screen dim" hidden>
+  <div class="card">
+    <h2>PAUSA</h2>
+    <button id="bResume" class="cta">Continuar</button>
+    <button id="bRestart" class="ghost">Reiniciar carrera</button>
+    <button id="bQuit" class="ghost">Salir al menú</button>
+  </div>
+</section>
+
+<section id="results" class="screen dim" hidden>
+  <div class="card wide">
+    <h2 id="rTitle">RESULTADO</h2>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Pos</th><th>Piloto</th><th>Tiempo</th><th>Mejor vuelta</th></tr></thead>
+        <tbody id="rBody"></tbody>
+      </table>
+    </div>
+    <div class="row">
+      <button id="bAgain" class="cta">Revancha</button>
+      <button id="bMenu" class="ghost">Menú</button>
+    </div>
+  </div>
+</section>
+
+<div id="loading" class="screen">
+  <div class="load">
+    <h1 class="title"><span>ASFALTO</span> <em>GT</em></h1>
+    <div class="bar"><i id="lBar"></i></div>
+    <p id="lText">Preparando el circuito…</p>
+  </div>
+</div>
+
+<div id="rotate" class="screen">
+  <svg viewBox="0 0 64 64" aria-hidden="true"><rect x="20" y="8" width="24" height="44" rx="4" fill="none" stroke="currentColor" stroke-width="3"/><path d="M10 40a24 24 0 0 0 16 16" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M22 58l4-2-2-4" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <p>Gira el iPhone para correr</p>
+</div>
+
+<div id="fatal" class="screen" hidden><p id="fatalText"></p></div>
+<!--/APP-->
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

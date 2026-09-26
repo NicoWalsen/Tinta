@@ -1,0 +1,15 @@
+{
+  "name": "Asfalto GT",
+  "short_name": "Asfalto GT",
+  "description": "Juego de carreras 3D con física realista",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#0e1013",
+  "theme_color": "#0e1013",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
