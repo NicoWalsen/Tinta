@@ -10,7 +10,7 @@ function makeNoiseBuffer(ctx, seconds = 2) {
 
 // Genera un bucle de explosiones de un V8 a `rpm` fijas. Al reproducirlo
 // más rápido/lento (playbackRate) se obtiene cualquier régimen.
-function makeEngineBuffer(ctx, { rpm, res1, res2, bright }) {
+export function makeEngineBuffer(ctx, { rpm, res1, res2, bright }) {
   const sr = ctx.sampleRate;
   const cycle = 120 / rpm;               // un ciclo de 4 tiempos = 2 vueltas
   const cycles = 16;
@@ -54,26 +54,44 @@ function softClip(ctx, amount = 2.2) {
   return ws;
 }
 
-class EngineVoice {
+// Voz de motor con dos timbres mezclables:
+// - áspero (pasto): saturación y agudos abiertos, el sonido agresivo de aceleración;
+// - suave (pista): sin saturación y con los agudos recortados.
+export class EngineVoice {
   constructor(ctx, buffers, dest, withPanner = false) {
     this.ctx = ctx;
     this.low = ctx.createBufferSource(); this.low.buffer = buffers.low; this.low.loop = true;
     this.high = ctx.createBufferSource(); this.high.buffer = buffers.high; this.high.loop = true;
     this.gLow = ctx.createGain(); this.gHigh = ctx.createGain();
-    this.shaper = softClip(ctx, 1.8);
-    this.filter = ctx.createBiquadFilter(); this.filter.type = 'lowpass'; this.filter.Q.value = 0.9;
-    this.body = ctx.createBiquadFilter(); this.body.type = 'peaking'; this.body.frequency.value = 160; this.body.gain.value = 5; this.body.Q.value = 1;
+    this.mix = ctx.createGain();
     this.out = ctx.createGain(); this.out.gain.value = 0;
     this.low.connect(this.gLow); this.high.connect(this.gHigh);
-    this.gLow.connect(this.shaper); this.gHigh.connect(this.shaper);
-    this.shaper.connect(this.body); this.body.connect(this.filter); this.filter.connect(this.out);
+    this.gLow.connect(this.mix); this.gHigh.connect(this.mix);
+
+    // Camino áspero
+    this.shaper = softClip(ctx, 1.8);
+    this.body = ctx.createBiquadFilter(); this.body.type = 'peaking'; this.body.frequency.value = 160; this.body.gain.value = 5; this.body.Q.value = 1;
+    this.filter = ctx.createBiquadFilter(); this.filter.type = 'lowpass'; this.filter.Q.value = 0.9;
+    this.roughGain = ctx.createGain(); this.roughGain.gain.value = 0;
+    this.mix.connect(this.shaper); this.shaper.connect(this.body); this.body.connect(this.filter);
+    this.filter.connect(this.roughGain); this.roughGain.connect(this.out);
+
+    // Camino suave: graves cálidos y filtro paso bajo de 24 dB/octava
+    this.softBody = ctx.createBiquadFilter(); this.softBody.type = 'peaking'; this.softBody.frequency.value = 140; this.softBody.gain.value = 3; this.softBody.Q.value = 0.8;
+    this.softLP1 = ctx.createBiquadFilter(); this.softLP1.type = 'lowpass'; this.softLP1.Q.value = 0.5;
+    this.softLP2 = ctx.createBiquadFilter(); this.softLP2.type = 'lowpass'; this.softLP2.Q.value = 0.5;
+    this.softGain = ctx.createGain(); this.softGain.gain.value = 1;
+    this.mix.connect(this.softBody); this.softBody.connect(this.softLP1); this.softLP1.connect(this.softLP2);
+    this.softLP2.connect(this.softGain); this.softGain.connect(this.out);
+
     if (withPanner && ctx.createStereoPanner) { this.pan = ctx.createStereoPanner(); this.out.connect(this.pan); this.pan.connect(dest); }
     else this.out.connect(dest);
     this.low.start(); this.high.start();
     this.baseLow = buffers.lowRpm; this.baseHigh = buffers.highRpm;
   }
 
-  set(rpm, throttle, volume, rateMul = 1, pan = 0) {
+  // rough: 0 = pista (suave) … 1 = pasto (áspero)
+  set(rpm, throttle, volume, rateMul = 1, pan = 0, rough = 0) {
     const now = this.ctx.currentTime, tc = 0.03;
     this.low.playbackRate.setTargetAtTime((rpm / this.baseLow) * rateMul, now, tc);
     this.high.playbackRate.setTargetAtTime((rpm / this.baseHigh) * rateMul, now, tc);
@@ -81,6 +99,14 @@ class EngineVoice {
     this.gLow.gain.setTargetAtTime(Math.cos(x * Math.PI / 2), now, tc);
     this.gHigh.gain.setTargetAtTime(Math.sin(x * Math.PI / 2), now, tc);
     this.filter.frequency.setTargetAtTime(700 + rpm * 0.45 + throttle * 3200, now, tc);
+    const soft = 260 + rpm * 0.09 + throttle * 260;
+    this.softLP1.frequency.setTargetAtTime(soft, now, tc);
+    this.softLP2.frequency.setTargetAtTime(soft, now, tc);
+    // Mezcla lineal: ambos caminos salen de la misma fuente (en fase), así que
+    // una mezcla de igual potencia subiría el volumen a mitad de la transición.
+    const r = Math.max(0, Math.min(1, rough));
+    this.roughGain.gain.setTargetAtTime(r, now, tc);
+    this.softGain.gain.setTargetAtTime((1 - r) * 1.2, now, tc);
     this.out.gain.setTargetAtTime(volume * (0.4 + throttle * 0.6), now, tc);
     if (this.pan) this.pan.pan.setTargetAtTime(pan, now, 0.05);
   }
@@ -145,6 +171,8 @@ export class AudioEngine {
     this.curbOsc.start();
     this.ready = true;
     this.popCooldown = 0;
+    this.rough = 0;
+    this.rivalRough = 0;
     this.lastThrottle = 0;
     this.resume();
   }
@@ -172,7 +200,10 @@ export class AudioEngine {
     this.popCooldown -= dt;
     if (this.lastThrottle > 0.6 && thr < 0.2 && rpm > 4800 && this.popCooldown <= 0) { this.pops(3 + Math.floor(Math.random() * 3)); this.popCooldown = 1.2; }
     this.lastThrottle = thr;
-    this.player.set(rpm, thr, 0.55);
+    // Motor: áspero sobre el pasto, suave sobre la pista (transición gradual)
+    const onGrassK = car.surf.filter(s => s === 2).length / 4;
+    this.rough += (Math.min(1, onGrassK * 2) - this.rough) * Math.min(1, dt * 5);
+    this.player.set(rpm, thr, 0.55, 1, 0, this.rough);
 
     // Neumáticos
     const onGrass = car.surf.filter(s => s === 2).length >= 2;
@@ -202,7 +233,9 @@ export class AudioEngine {
       const vrel = ((rival.vx - listener.vx) * dx + (rival.vz - listener.vz) * dz) / (d + 0.01);
       const doppler = Math.max(0.8, Math.min(1.25, 343 / (343 + vrel)));
       const vol = 0.42 / (1 + (d / 9) ** 1.6);
-      this.rival.set(rival.rpm, rival.throttleVis, vol, doppler, pan);
+      const rivalGrass = rival.surf.filter(s => s === 2).length / 4;
+      this.rivalRough += (Math.min(1, rivalGrass * 2) - this.rivalRough) * Math.min(1, dt * 5);
+      this.rival.set(rival.rpm, rival.throttleVis, vol, doppler, pan, this.rivalRough);
     } else {
       this.rival.out.gain.setTargetAtTime(0, now, 0.1);
     }
