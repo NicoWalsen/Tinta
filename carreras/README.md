@@ -38,7 +38,8 @@ También funciona con mandos de PlayStation, Xbox o MFi.
 | `src/ai.js` | Pilotos rivales |
 | `src/race.js` | Vueltas, posiciones y tiempos |
 | `src/world.js` | Escenario: asfalto, pianos, muros, terreno, árboles, tribunas |
-| `src/carModel.js` | Modelo 3D del auto generado por código |
+| `src/carModel.js` | Modelo 3D del auto generado por código (estilo GT3) |
+| `src/carTextures.js` | Decoración de competición, relieve de paneles, carbono, neumáticos |
 | `src/textures.js` | Texturas generadas por código |
 | `src/effects.js` | Marcas de derrape, humo, polvo y chispas |
 | `src/audio.js` | Motor V8 sintetizado y sonidos |
