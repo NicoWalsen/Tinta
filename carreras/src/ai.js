@@ -16,12 +16,13 @@ export class AIDriver {
     this.stuck = 0;
     this.mistakeTimer = 4 + rnd() * 10;
     this.mistake = 0;
+    this.boosting = false;
     this.rnd = rnd;
   }
 
   update(dt, cars, active) {
     const car = this.car, tr = this.track, tp = car.tp, inp = car.input;
-    if (!active) { inp.throttle = 0; inp.brake = 1; inp.steer = 0; return; }
+    if (!active) { inp.throttle = 0; inp.brake = 1; inp.steer = 0; inp.boost = false; this.boosting = false; return; }
     const N = tr.N;
     const v = car.speed;
     const sinH = Math.sin(car.heading), cosH = Math.cos(car.heading);
@@ -83,6 +84,14 @@ export class AIDriver {
     }
     if (followBrake > 0) { inp.brake = Math.max(inp.brake, followBrake * 0.7); inp.throttle *= 1 - followBrake; }
     inp.handbrake = false;
+
+    // --- Turbo: a la salida de curvas hacia rectas, cuando falta mucha
+    // velocidad (los rivales fáciles lo usan menos). Con histéresis.
+    const need = 9 + Math.max(0, 0.94 - this.baseSkill) * 60;
+    if (!this.boosting) {
+      if (car.turbo > 0.3 && err > need && v > 25 && inp.throttle > 0.95 && Math.abs(car.slipR) < 0.08 && Math.abs(tp.lat) < tr.def.roadHalf) this.boosting = true;
+    } else if (err < 3 || inp.brake > 0 || inp.throttle < 0.5 || car.turboEmpty) this.boosting = false;
+    inp.boost = this.boosting;
 
     // --- Pequeños errores humanos ocasionales ---
     this.mistakeTimer -= dt;

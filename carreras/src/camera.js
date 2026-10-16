@@ -30,9 +30,10 @@ export class CameraRig {
     const m = CAMERA_MODES[this.mode];
     const cam = this.cam;
     const speedK = Math.min(1, car.speed / 75);
+    const boostK = car.boost || 0;
     const fx = Math.sin(car.heading), fz = Math.cos(car.heading);
     this.shake = Math.max(0, this.shake - dt * 2.5);
-    const vib = speedK * speedK * 0.012 + car.rough * 0.03 * Math.min(1, car.speed / 20) + this.shake * 0.12;
+    const vib = speedK * speedK * 0.012 + car.rough * 0.03 * Math.min(1, car.speed / 20) + this.shake * 0.12 + boostK * speedK * 0.008;
     const jx = (Math.random() - 0.5) * vib, jy = (Math.random() - 0.5) * vib;
 
     if (m.hood) {
@@ -65,7 +66,8 @@ export class CameraRig {
       this.tmp.set(car.x + bx * 2.2, car.y + m.look, car.z + bz * 2.2);
       cam.lookAt(this.tmp);
     }
-    const fovT = m.fov + speedK * speedK * 14;
+    // el turbo abre un poco el ángulo de visión (sensación de velocidad)
+    const fovT = m.fov + speedK * speedK * 14 + boostK * 7;
     this.fov += (fovT - this.fov) * (1 - Math.exp(-dt * 3));
     if (Math.abs(cam.fov - this.fov) > 0.01) { cam.fov = this.fov; }
     cam.updateProjectionMatrix();

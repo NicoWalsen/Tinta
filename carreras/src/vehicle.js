@@ -35,7 +35,7 @@ export class Vehicle {
     this.vx = 0; this.vz = 0;
     this.yawRate = 0;
     this.steerAngle = 0;
-    this.input = { throttle: 0, brake: 0, steer: 0, handbrake: false };
+    this.input = { throttle: 0, brake: 0, steer: 0, handbrake: false, boost: false };
     this.assists = { abs: true, tcs: true, esc: true, steer: true };
     this.gear = 1;
     this.rpm = spec.idle;
@@ -57,6 +57,15 @@ export class Vehicle {
     this.tp = { idx: 0, t: 0, s: 0, lat: 0, y: 0, lx: 1, lz: 0, curb: false, slope: 0 };
     this.impact = 0;              // intensidad del último choque (para efectos)
     this.impactX = 0; this.impactZ = 0;
+    this.turbo = 1;               // energía del turbo (0..1)
+    this.boost = 0;               // empuje del turbo aplicado (0..1, suavizado)
+    this.boosting = false;
+    this.turboEmpty = false;      // agotado: espera a recargar un poco antes de volver a usarse
+    this.turboAllowed = false;    // se habilita al largar
+  }
+
+  resetTurbo() {
+    this.turbo = 1; this.boost = 0; this.boosting = false; this.turboEmpty = false; this.turboAllowed = false;
   }
 
   place(track, s, lat) {
@@ -171,6 +180,22 @@ export class Vehicle {
     if (reverse) { Fdrive = -Fdrive; if (u < -9) Fdrive = 0; }
     this.throttleVis = drive;
 
+    // --- Turbo: potencia extra mientras haya energía (también cubre el
+    // hueco de par al cambiar de marcha). Se recarga al frenar.
+    if (this.turbo <= 0) this.turboEmpty = true;
+    else if (this.turbo > 0.1) this.turboEmpty = false;
+    const boostOn = !!inp.boost && this.turboAllowed && !this.turboEmpty && drive > 0.1 && !reverse && this.rpm < S.limiter;
+    this.boost += ((boostOn ? 1 : 0) - this.boost) * Math.min(1, dt * (boostOn ? 8 : 5));
+    this.boosting = boostOn;
+    let Fboost = 0;
+    if (!reverse && this.boost > 0.001) {
+      Fboost = this.boost * Math.min(S.turboForceMax, S.turboPower / Math.max(vAbs, 1));
+      Fdrive += Fboost;
+    }
+    if (!boostOn && this.turboAllowed) {
+      this.turbo = Math.min(1, this.turbo + (brakeIn * Math.min(1, vAbs / 20) * S.turboRegenBrake + S.turboRegenIdle) * dt);
+    }
+
     // --- Frenos (con ABS) ---
     let FbF = brakeIn * S.brakeForce * m * G * S.brakeBias;
     let FbR = brakeIn * S.brakeForce * m * G * (1 - S.brakeBias);
@@ -185,6 +210,7 @@ export class Vehicle {
     const dirU = u >= 0 ? 1 : -1;
     let FxF = -dirU * Math.min(FbF, capF);
     let FxR = Fdrive - dirU * Math.min(FbR, capR);
+    const FxR0 = FxR;
 
     // Control de tracción / patinamiento de ruedas traseras
     this.wheelspin = 0;
@@ -199,6 +225,14 @@ export class Vehicle {
       const latUse = Math.min(0.97, this.latUseR);
       const limit = capR * Math.sqrt(1 - latUse * latUse);
       if (FxR > limit) FxR = Math.max(limit, Math.min(FxR, capR * 0.12));
+    }
+
+    // El turbo gasta energía según la potencia extra que de verdad llegó al
+    // piso: si el control de tracción la recorta (arrancando, en curva), no
+    // se desperdicia.
+    if (Fboost > 0) {
+      const used = Math.max(0, Math.min(Fboost, FxR - (FxR0 - Fboost)));
+      this.turbo = Math.max(0, this.turbo - dt / S.turboDuration * used * Math.max(vAbs, 1) / S.turboPower);
     }
 
     // --- Fuerzas laterales (Pacejka + círculo de fricción) ---

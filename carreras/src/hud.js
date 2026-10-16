@@ -1,5 +1,5 @@
 // Interfaz en pantalla: posición, vuelta, torre de tiempos, cronómetro,
-// velocímetro con luces de cambio y minimapa.
+// velocímetro con luces de cambio, energía del turbo y minimapa.
 import { formatTime } from './race.js';
 
 const $ = (id) => document.getElementById(id);
@@ -12,6 +12,7 @@ export class HUD {
       root: $('hud'), pos: $('hPos'), cars: $('hCars'), lap: $('hLap'), laps: $('hLaps'),
       time: $('hTime'), best: $('hBest'), speed: $('hSpeed'), gear: $('hGear'), rpm: $('hRpm'),
       tower: $('tower'), msg: $('msg'), toast: $('toast'), last: $('hLast'),
+      turbo: $('hTurbo'), turboFill: $('hTurboFill'), turboBtn: document.querySelector('.turbo-btn'),
     };
     this.leds = [];
     for (let i = 0; i < 15; i++) {
@@ -86,6 +87,18 @@ export class HUD {
       this.cache.leds = key;
       this.leds.forEach((l, i) => l.classList.toggle('on', flash || i < n));
       e.rpm.classList.toggle('flash', flash);
+    }
+
+    // Energía del turbo (barra del HUD y relleno del botón)
+    const tE = Math.round(car.turbo * 200) / 200;
+    const low = car.turboEmpty || tE < 0.12;
+    const tKey = tE + (car.boosting ? 'b' : '') + (low ? 'l' : '');
+    if (this.cache.turbo !== tKey) {
+      this.cache.turbo = tKey;
+      e.turboFill.style.transform = `scaleX(${tE})`;
+      e.turbo.classList.toggle('active', car.boosting);
+      e.turbo.classList.toggle('low', low);
+      if (e.turboBtn) { e.turboBtn.style.setProperty('--e', tE); e.turboBtn.classList.toggle('empty', car.turboEmpty); }
     }
 
     this.towerTimer -= dt;

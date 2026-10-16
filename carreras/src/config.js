@@ -51,6 +51,13 @@ export const CAR = {
   brakeBias: 0.62,      // reparto delantero
   maxSteer: 0.62,       // ángulo máximo de las ruedas (rad)
   steerSpeed: 3.4,      // velocidad de giro del volante (rad/s)
+  // Turbo: potencia extra con energía limitada (como el "push-to-pass" de
+  // los híbridos de competición). Se recarga frenando.
+  turboPower: 150000,   // potencia extra (W)
+  turboForceMax: 5200,  // tope de fuerza extra a baja velocidad (N)
+  turboDuration: 5,     // segundos de turbo con la barra llena
+  turboRegenBrake: 0.07, // recarga por segundo frenando a fondo
+  turboRegenIdle: 0.005, // recarga lenta por segundo el resto del tiempo
 };
 
 export const RACE = {

@@ -1,5 +1,5 @@
 // Entrada: táctil multitoque (botones / deslizar / inclinar), teclado y mando.
-// Produce un estado continuo { steer, throttle, brake, handbrake }.
+// Produce un estado continuo { steer, throttle, brake, handbrake, boost }.
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const wrap = (a) => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
@@ -9,12 +9,12 @@ export class Input {
     this.root = root;
     this.cb = callbacks;
     this.mode = 'botones';          // 'botones' | 'deslizar' | 'inclinar'
-    this.state = { steer: 0, throttle: 0, brake: 0, handbrake: false };
-    this.touch = { left: false, right: false, gas: false, brake: false, hand: false, slide: 0, sliding: false };
+    this.state = { steer: 0, throttle: 0, brake: 0, handbrake: false, boost: false };
+    this.touch = { left: false, right: false, gas: false, brake: false, hand: false, boost: false, slide: 0, sliding: false };
     this.keys = new Set();
     this.pointers = new Map();
     this.tilt = { available: false, active: false, angle: 0, zero: 0, raw: 0, has: false };
-    this.pad = { steer: 0, throttle: 0, brake: 0, hand: false, active: false, prevButtons: [] };
+    this.pad = { steer: 0, throttle: 0, brake: 0, hand: false, boost: false, active: false, prevButtons: [] };
     this.enabled = false;
     this._bind();
   }
@@ -88,13 +88,14 @@ export class Input {
 
   _refresh() {
     const t = this.touch;
-    t.left = t.right = t.gas = t.brake = t.hand = false;
+    t.left = t.right = t.gas = t.brake = t.hand = t.boost = false;
     for (const p of this.pointers.values()) {
       if (p.ctl === 'left') t.left = true;
       else if (p.ctl === 'right') t.right = true;
       else if (p.ctl === 'gas') t.gas = true;
       else if (p.ctl === 'brake') t.brake = true;
       else if (p.ctl === 'hand') t.hand = true;
+      else if (p.ctl === 'boost') t.boost = true;
     }
     for (const el of this.root.querySelectorAll('[data-ctl]')) {
       el.classList.toggle('on', !!t[el.dataset.ctl]);
@@ -151,6 +152,7 @@ export class Input {
     this.pad.throttle = Math.max(b(7), b(0));
     this.pad.brake = Math.max(b(6), b(2));
     this.pad.hand = pressed(1) || pressed(5);
+    this.pad.boost = pressed(4) || pressed(10);
     const prev = this.pad.prevButtons;
     if (pressed(3) && !prev[3]) this.cb.camera?.();
     if (pressed(9) && !prev[9]) this.cb.pause?.();
@@ -186,19 +188,22 @@ export class Input {
       s.steer += clamp(d, -rate * dt, rate * dt);
     }
 
-    // Pedales (rampa suave para no patinar al tocar la pantalla)
-    const gasOn = t.gas || kbGas;
+    // Pedales (rampa suave para no patinar al tocar la pantalla).
+    // El turbo también acelera: se puede deslizar el dedo del acelerador al turbo.
+    const boostOn = t.boost || k.has('shift') || k.has('n') || this.pad.boost;
+    const gasOn = t.gas || kbGas || boostOn;
     const brakeOn = t.brake || kbBrake;
     let thrT = gasOn ? 1 : 0, brkT = brakeOn ? 1 : 0;
     if (this.pad.active) { thrT = Math.max(thrT, this.pad.throttle); brkT = Math.max(brkT, this.pad.brake); }
     s.throttle += clamp(thrT - s.throttle, -dt * 9, dt * 5);
     s.brake += clamp(brkT - s.brake, -dt * 10, dt * 7);
     s.handbrake = t.hand || k.has(' ') || this.pad.hand;
+    s.boost = boostOn;
   }
 
   reset() {
     this.pointers.clear();
     this._refresh();
-    Object.assign(this.state, { steer: 0, throttle: 0, brake: 0, handbrake: false });
+    Object.assign(this.state, { steer: 0, throttle: 0, brake: 0, handbrake: false, boost: false });
   }
 }
