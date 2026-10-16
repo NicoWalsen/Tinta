@@ -204,7 +204,7 @@ export class Effects {
         // polvo en el pasto
         if (Math.random() < Math.min(1, v / 25)) this.smoke.emit({
           x, y: y + 0.2, z, vx: car.vx * 0.3 + (Math.random() - 0.5) * 2, vy: 1 + Math.random(), vz: car.vz * 0.3 + (Math.random() - 0.5) * 2,
-          life: 1.4 + Math.random(), size0: 0.8, size1: 4.5, alpha: 0.45,
+          life: 1.3 + Math.random(), size0: 0.8, size1: 3.8, alpha: 0.28,
           r: 0.33 * this.light, g: 0.27 * this.light, b: 0.18 * this.light, drag: 1.2,
         });
       } else if (skid > 0.6 && v > 3) {

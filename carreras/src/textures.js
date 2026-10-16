@@ -288,60 +288,6 @@ export function makeCrowd(aniso) {
   return toTexture(c, { aniso });
 }
 
-// ---------------------------------------------------------------- Árboles (atlas: pino | frondoso)
-export function makeTrees() {
-  const W = 512, H = 512;
-  const c = canvas(W, H);
-  const ctx = c.getContext('2d');
-  const rnd = mulberry32(77);
-
-  // Pino
-  ctx.fillStyle = '#4a3322';
-  ctx.fillRect(122, 300, 12, 212);
-  for (let n = 0; n < 5200; n++) {
-    const t = rnd();                       // 0 arriba, 1 abajo
-    const y = 18 + t * 440;
-    const half = 8 + t * 104 * (0.85 + 0.15 * Math.sin(t * 40));
-    const x = 128 + (rnd() * 2 - 1) * half * Math.sqrt(rnd());
-    const side = (x - 128) / (half + 1);
-    const light = 0.55 + 0.45 * (1 - t) * 0.4 - side * 0.18 + (rnd() - 0.5) * 0.35;
-    const g = Math.max(0, Math.min(1, light));
-    ctx.fillStyle = `rgb(${18 + g * 30},${40 + g * 58},${26 + g * 30})`;
-    ctx.beginPath();
-    ctx.ellipse(x, y, 3 + rnd() * 5, 2 + rnd() * 3, (rnd() - 0.5) * 0.8, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  // Árbol frondoso
-  const ox = 256;
-  ctx.strokeStyle = '#5a4331'; ctx.lineCap = 'round';
-  ctx.lineWidth = 14; ctx.beginPath(); ctx.moveTo(ox + 128, 512); ctx.lineTo(ox + 124, 300); ctx.stroke();
-  ctx.lineWidth = 6;
-  for (let k = 0; k < 6; k++) {
-    ctx.beginPath(); ctx.moveTo(ox + 126, 380 - k * 22);
-    ctx.lineTo(ox + 128 + (rnd() - 0.5) * 170, 250 - k * 25 - rnd() * 40); ctx.stroke();
-  }
-  const blobs = [];
-  for (let k = 0; k < 26; k++) {
-    const a = rnd() * Math.PI * 2, rr = Math.sqrt(rnd());
-    blobs.push({ x: ox + 128 + Math.cos(a) * rr * 80, y: 200 + Math.sin(a) * rr * 120, r: 34 + rnd() * 28 });
-  }
-  for (let n = 0; n < 9000; n++) {
-    const b = blobs[Math.floor(rnd() * blobs.length)];
-    const a = rnd() * Math.PI * 2, rr = Math.sqrt(rnd()) * b.r;
-    const x = b.x + Math.cos(a) * rr, y = b.y + Math.sin(a) * rr;
-    if (y > 440 || x < ox + 4 || x > ox + 252 || y < 6) continue;
-    const lx = (x - (ox + 128)) / 128, ly = (y - 200) / 200;
-    const light = 0.62 - lx * 0.22 - ly * 0.3 + (rnd() - 0.5) * 0.45;
-    const g = Math.max(0, Math.min(1, light));
-    ctx.fillStyle = `rgb(${28 + g * 50},${50 + g * 70},${22 + g * 26})`;
-    ctx.beginPath(); ctx.arc(x, y, 2 + rnd() * 3.5, 0, Math.PI * 2); ctx.fill();
-  }
-  const t = toTexture(c, { repeat: false });
-  t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
-  return t;
-}
-
 // ---------------------------------------------------------------- Sprites varios
 export function makeSmoke() {
   const S = 128;

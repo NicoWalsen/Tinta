@@ -5,6 +5,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makeNoise2D, fbm, mulberry32 } from './noise.js';
 import * as TX from './textures.js';
 import { RACE } from './config.js';
+import { Vegetation } from './vegetation.js';
 
 const smoothstep = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
@@ -123,7 +124,6 @@ export class World {
       fence: TX.makeFence(),
       ads: TX.makeAds(a),
       crowd: TX.makeCrowd(a),
-      trees: TX.makeTrees(),
       checker: TX.makeChecker(),
       boards: TX.makeDistanceBoards(),
       facade: TX.makeFacade(a),
@@ -360,7 +360,8 @@ export class World {
     const hills = fbm(n, x / 420, z / 420, 4) * 16 + fbm(n, x / 110 + 7, z / 110, 3) * 3;
     const b = tr.bounds;
     const r = Math.hypot((x - b.cx) / 1.25, z - b.cz);
-    const ridge = 1 - Math.abs(fbm(n, x / 900 + 3, z / 900 - 5, 5));
+    const rn = fbm(n, x / 900 + 3, z / 900 - 5, 5);
+    const ridge = 1 - Math.sqrt(rn * rn + 0.004);   // cresta redondeada: evita aristas filosas
     const mountains = smoothstep(950, 2300, r) * (ridge * ridge * 330 + 40);
     const natural = base + hills * smoothstep(35, 240, dist) + mountains;
     const flatten = 1 - smoothstep(W + 16, W + 30, dist);
@@ -393,6 +394,9 @@ export class World {
         let R = 1 + v1 * 0.12 + v2 * 0.05, G = 1 + v1 * 0.06 + v2 * 0.05, B = 1 + v1 * 0.02;
         const dry = smoothstep(0.15, 0.5, v1);
         R += dry * 0.25; G += dry * 0.08;
+        // suelo de bosque más oscuro donde se agrupan los árboles
+        const forest = smoothstep(-0.18, 0.05, fbm(n, x / 180, z / 180, 2)) * smoothstep(30, 90, this.sampleDF(x, z).dist);
+        R *= 1 - forest * 0.22; G *= 1 - forest * 0.16; B *= 1 - forest * 0.18;
         R = R * (1 - rock) + 1.45 * rock; G = G * (1 - rock) + 1.22 * rock; B = B * (1 - rock) + 1.25 * rock;
         col[c++] = R * 0.92; col[c++] = G * 0.92; col[c++] = B * 0.92;
       }
@@ -412,6 +416,16 @@ export class World {
     g.computeVertexNormals();
     const mat = this.mat.grass.clone();
     mat.vertexColors = true;
+    // Roca en laderas empinadas (por píxel, con la normal geométrica)
+    mat.onBeforeCompile = (sh) => {
+      sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+        {
+          vec3 nW = normalize( ( vec4( nonPerturbedNormal, 0.0 ) * viewMatrix ).xyz );
+          float rock = smoothstep( 0.62, 0.86, 1.0 - nW.y );
+          diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.18, 0.17, 0.155 ) * ( 0.75 + 0.3 * vColor.g ), rock * 0.85 );
+        }`);
+    };
+    mat.customProgramCacheKey = () => 'asfalto-terrain';
     const terrain = new THREE.Mesh(g, mat);
     terrain.receiveShadow = true;
     this.group.add(terrain);
@@ -421,63 +435,82 @@ export class World {
   buildTrees() {
     const tr = this.track, b = tr.bounds, W = tr.def.wallOffset;
     const rnd = mulberry32(4242);
-    const count = this.quality === 'baja' ? 1200 : this.quality === 'media' ? 2000 : 2800;
-    const make = (u0, u1, aspect) => {
-      const w = aspect, h = 1;
-      const quad = (rot) => {
-        const g = new THREE.PlaneGeometry(w, h);
-        g.translate(0, h / 2, 0);
-        g.rotateY(rot);
-        const uvA = g.attributes.uv;
-        for (let k = 0; k < uvA.count; k++) uvA.setX(k, u0 + uvA.getX(k) * (u1 - u0));
-        return g;
-      };
-      const g = mergeGeometries([quad(0), quad(Math.PI / 2)]);
-      // normales "esféricas": iluminación volumétrica en vez de planos
-      const P = g.attributes.position, Nn = g.attributes.normal;
-      for (let k = 0; k < P.count; k++) {
-        const v = new THREE.Vector3(P.getX(k) * 1.6, (P.getY(k) - 0.45) * 1.2 + 0.25, P.getZ(k) * 1.6).normalize();
-        Nn.setXYZ(k, v.x, v.y, v.z);
-      }
-      return g;
+    const q = this.quality;
+    const treeCount = q === 'baja' ? 1300 : q === 'media' ? 2400 : 3400;
+    const bushCount = q === 'baja' ? 400 : q === 'media' ? 900 : 1300;
+    const items = [];
+    const tints = {
+      spruce: () => [0.37 + rnd() * 0.04, 0.12 + rnd() * 0.1, 0.84 + rnd() * 0.12],
+      pine: () => [0.29 + rnd() * 0.05, 0.15 + rnd() * 0.1, 0.86 + rnd() * 0.1],
+      oak: () => [0.2 + rnd() * 0.1, 0.18 + rnd() * 0.15, 0.82 + rnd() * 0.16],
+      poplar: () => [0.19 + rnd() * 0.05, 0.2 + rnd() * 0.12, 0.88 + rnd() * 0.1],
+      bush: () => [0.22 + rnd() * 0.08, 0.15 + rnd() * 0.12, 0.8 + rnd() * 0.14],
     };
-    const geoPine = make(0, 0.5, 0.5);
-    const geoLeaf = make(0.5, 1, 0.5);
-    const mat = new THREE.MeshStandardMaterial({
-      map: this.tex.trees, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.95,
-    });
-    this.treeMat = mat;
-    const pines = [], leaves = [];
+    const heights = { spruce: [12, 22], pine: [14, 23], oak: [9, 15], poplar: [16, 24], bush: [1.4, 3.2] };
+    const add = (species, x, z, sink = 0.4) => {
+      const [h0, h1] = heights[species];
+      items.push({ species, x, y: this.heightAt(x, z) - sink, z, h: h0 + rnd() * (h1 - h0), widthMul: 0.85 + rnd() * 0.3, rot: rnd() * Math.PI, tint: tints[species]() });
+    };
+
+    // Hileras de álamos junto a dos rectas (como en los caminos reales)
+    for (const [s0, s1, side] of [[1250, 1500, 1], [2400, 2760, -1]]) {
+      for (let s = s0; s < s1; s += 8 + rnd() * 3) {
+        const p = tr.pointAt(s, side * (W + 19 + rnd() * 2));
+        if (!this.excluded(p.x, p.z)) add('poplar', p.x, p.z);
+      }
+    }
+    // Bosques y árboles sueltos. Casi la mitad se reserva para la franja
+    // junto a la pista (lo que se ve al manejar); el resto, hacia el horizonte.
     const sx = b.maxX - b.minX + 1400, sz = b.maxZ - b.minZ + 1400;
-    let tries = 0;
-    while (pines.length + leaves.length < count && tries < count * 20) {
+    const nearQuota = Math.floor(treeCount * 0.45);
+    let tries = 0, near = 0;
+    while (near < nearQuota && tries < nearQuota * 40) {
+      tries++;
+      const x = b.minX - 110 + rnd() * (b.maxX - b.minX + 220), z = b.minZ - 110 + rnd() * (b.maxZ - b.minZ + 220);
+      const { dist } = this.sampleDF(x, z);
+      if (dist < W + 10 || dist > 95) continue;
+      if (fbm(this.noise, x / 70 + 5, z / 70, 2) < -0.25) continue;   // claros entre grupos
+      if (this.excluded(x, z)) continue;
+      const r = rnd();
+      add(r < 0.36 ? 'oak' : r < 0.64 ? 'pine' : r < 0.95 ? 'spruce' : 'poplar', x, z);
+      near++;
+    }
+    tries = 0;
+    while (items.length < treeCount && tries < treeCount * 25) {
       tries++;
       const x = b.minX - 700 + rnd() * sx, z = b.minZ - 700 + rnd() * sz;
       const { dist } = this.sampleDF(x, z);
-      if (dist < W + 9) continue;
+      if (dist < 95) continue;
       // más densidad cerca de la pista (sensación de velocidad)
       const keep = dist < 120 ? 0.9 : dist < 350 ? 0.55 : 0.28;
       if (rnd() > keep) continue;
       // bosquecitos: agrupar con ruido
       if (fbm(this.noise, x / 180, z / 180, 2) < -0.15 && dist > 60) continue;
       if (this.excluded(x, z)) continue;
-      const y = this.heightAt(x, z) - 0.4;
-      const pine = rnd() < 0.55;
-      const h = pine ? 11 + rnd() * 9 : 8 + rnd() * 6;
-      const m = new THREE.Matrix4().compose(
-        new THREE.Vector3(x, y, z),
-        new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), rnd() * Math.PI),
-        new THREE.Vector3(h * (0.9 + rnd() * 0.25), h, h * (0.9 + rnd() * 0.25)));
-      (pine ? pines : leaves).push(m);
+      // coníferas en las laderas altas; mezcla con robles en el llano
+      const alt = this.heightAt(x, z) - this.avgY;
+      const r = rnd();
+      const species = alt > 30 ? (r < 0.6 ? 'spruce' : 'pine') : r < 0.38 ? 'oak' : r < 0.66 ? 'pine' : r < 0.94 ? 'spruce' : 'poplar';
+      add(species, x, z);
     }
-    for (const [geo, list] of [[geoPine, pines], [geoLeaf, leaves]]) {
-      const inst = new THREE.InstancedMesh(geo, mat, list.length);
-      list.forEach((m, k) => inst.setMatrixAt(k, m));
-      inst.castShadow = this.quality !== 'baja';
-      inst.receiveShadow = false;
-      inst.computeBoundingSphere();
-      this.group.add(inst);
+    // Arbustos al pie de los muros y en los bordes del bosque
+    let bushes = 0;
+    tries = 0;
+    while (bushes < bushCount && tries < bushCount * 40) {
+      tries++;
+      const x = b.minX - 300 + rnd() * (sx - 800), z = b.minZ - 300 + rnd() * (sz - 800);
+      const { dist } = this.sampleDF(x, z);
+      if (dist < W + 3 || dist > 160) continue;
+      if (dist > W + 18 && fbm(this.noise, x / 180, z / 180, 2) < -0.1) continue;
+      if (fbm(this.noise, x / 40 + 9, z / 40, 2) < 0) continue;   // matorrales agrupados
+      if (this.excluded(x, z)) continue;
+      add('bush', x, z, 0.2);
+      bushes++;
     }
+
+    this.vegetation = new Vegetation(items, { castShadow: q !== 'baja', alphaToCoverage: q !== 'baja' });
+    this.group.add(this.vegetation.mesh);
+    this.treeCount = items.length;
   }
 
   excluded(x, z) {

@@ -37,7 +37,9 @@ También funciona con mandos de PlayStation, Xbox o MFi.
 | `src/vehicle.js` | Física: neumáticos Pacejka, transferencia de peso, caja, ABS/TC/ESC, choques |
 | `src/ai.js` | Pilotos rivales |
 | `src/race.js` | Vueltas, posiciones y tiempos |
-| `src/world.js` | Escenario: asfalto, pianos, muros, terreno, árboles, tribunas |
+| `src/world.js` | Escenario: asfalto, pianos, muros, terreno, tribunas y ubicación de la vegetación |
+| `src/vegetation.js` | Árboles (4 especies) y arbustos: atlas pintado por código, viento y contraluz en una sola llamada de dibujo |
+| `src/sunrays.js` | Rayos de sol, resplandor y reflejos de lente al mirar hacia el sol |
 | `src/carModel.js` | Modelo 3D del auto generado por código (estilo GT3) |
 | `src/carTextures.js` | Decoración de competición, relieve de paneles, carbono, neumáticos |
 | `src/textures.js` | Texturas generadas por código |

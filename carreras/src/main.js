@@ -4,6 +4,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { SunRaysPass } from './sunrays.js';
 import { Sky } from 'three/addons/objects/Sky.js';
 import { RACE, DRIVERS, PLAYER_COLORS, DIFFICULTY } from './config.js';
 import { Track } from './track.js';
@@ -81,6 +82,10 @@ let dpr = Math.min(q.dpr, window.devicePixelRatio || 1);
 const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: q.msaa });
 const composer = new EffectComposer(renderer, rt);
 composer.addPass(new RenderPass(scene, camera));
+// Rayos de sol: solo trabajan cuando el sol está en (o cerca de) la pantalla
+const sunRays = new SunRaysPass();
+sunRays.enabled = false;
+composer.addPass(sunRays);
 // Umbral alto: el cielo junto al sol llega a ~10 (medido), así que solo
 // superan el umbral el disco solar, las luces y las chispas.
 const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.4, 0.4, 13);
@@ -89,7 +94,7 @@ bloom.enabled = q.bloom;
 // más que una luz y, sin este tope, su halo cubriría toda la pantalla.
 bloom.materialHighPassFilter.fragmentShader = bloom.materialHighPassFilter.fragmentShader.replace(
   'vec4 texel = texture2D( tDiffuse, vUv );',
-  'vec4 texel = texture2D( tDiffuse, vUv ); texel.rgb = min( texel.rgb, vec3( 40.0 ) );')
+  'vec4 texel = texture2D( tDiffuse, vUv ); texel.rgb = min( texel.rgb, vec3( 18.0 ) );')
   // canal más brillante en vez de luminancia: una luz roja brilla sin volverse blanca
   .replace('float v = luminance( texel.xyz );', 'float v = max( texel.r, max( texel.g, texel.b ) );');
 bloom.materialHighPassFilter.needsUpdate = true;
@@ -115,8 +120,20 @@ function applyViewOffset() {
 }
 
 // ---------------------------------------------------------------- cielo, luz y entorno
-const sunDir = new THREE.Vector3().setFromSphericalCoords(1, THREE.MathUtils.degToRad(90 - 31), THREE.MathUtils.degToRad(215));
-const sky = new Sky();
+const sunDir = new THREE.Vector3().setFromSphericalCoords(1, THREE.MathUtils.degToRad(90 - 21), THREE.MathUtils.degToRad(215));
+// Tope de brillo del cielo junto al sol (el disco solar queda intacto): sin él,
+// con el sol bajo, una zona grande del cielo superaba el umbral del bloom y
+// la imagen se cubría de un velo blanco.
+function capSky(s) {
+  s.material.fragmentShader = s.material.fragmentShader.replace(
+    'vec3 texColor = ( Lin + L0 ) * 0.04 + sundiscColor + vec3( 0.0, 0.0003, 0.00075 );',
+    `vec3 skyCol = ( Lin + L0 ) * 0.04;
+     skyCol *= min( 1.0, 9.0 / max( max( skyCol.r, skyCol.g ), max( skyCol.b, 1e-4 ) ) );
+     vec3 texColor = skyCol + sundiscColor + vec3( 0.0, 0.0003, 0.00075 );`);
+  s.material.needsUpdate = true;
+  return s;
+}
+const sky = capSky(new Sky());
 sky.scale.setScalar(8000);
 const skyU = sky.material.uniforms;
 skyU.turbidity.value = 2.8;
@@ -144,7 +161,7 @@ scene.add(new THREE.HemisphereLight(0xd3e3ff, 0x55603f, 0.12));
 function buildEnvironment() {
   const pmrem = new THREE.PMREMGenerator(renderer);
   const envScene = new THREE.Scene();
-  const s2 = new Sky();
+  const s2 = capSky(new Sky());
   s2.scale.setScalar(100);
   for (const k of Object.keys(skyU)) {
     const v = skyU[k].value;
@@ -290,6 +307,7 @@ async function boot() {
   progress(0.86, 'Iluminando el cielo…');
   await nextFrame();
   buildEnvironment();
+  world.vegetation.setSun(sunDir);
   buildCarReflections();
   updateSun(player.x, player.y, player.z);
 
@@ -385,6 +403,7 @@ function applyQuality() {
   q = qualityProfile();
   dpr = Math.min(q.dpr, window.devicePixelRatio || 1);
   bloom.enabled = q.bloom;
+  world.vegetation.setAlphaToCoverage(q.msaa > 0);
   if (sun.shadow.mapSize.x !== q.shadow) {
     sun.shadow.mapSize.set(q.shadow, q.shadow);
     if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
@@ -641,6 +660,9 @@ function loop(now) {
   updateSun(player.x + fx * 22, player.y, player.z + fz * 22);
   sky.position.copy(camera.position);
   skyU.time.value += dt;
+  world.vegetation.update(time);
+  sunRays.update(camera, sunDir);
+  sunRays.enabled = q.bloom && sunRays.visibility > 0.01;
   composer.render(dt);
 
   // calidad adaptativa: baja la resolución si el iPhone no llega a ~55 FPS
@@ -682,7 +704,7 @@ canvas.addEventListener('webglcontextlost', (e) => {
 window.__asfalto = {
   get state() { return state; }, get player() { return player; }, get race() { return race; }, get dpr() { return dpr; }, settings,
   skipCountdown(t) { countdownT = t === undefined ? goAt : t; },
-  get debug() { return { bloom, sky, scene, effects, sun, renderer, composer }; },
+  get debug() { return { bloom, sky, scene, effects, sun, renderer, composer, sunRays, world }; },
   camera(m) { rig.mode = m; rig.ready = false; },
   // Adelanta la carrera `sec` segundos sin dibujar (solo para pruebas)
   warp(sec) {
