@@ -65,17 +65,21 @@ function bark(ctx, x0, y0, x1, y1, w0, w1, c0, c1) {
 function paintSpruce(ctx, rnd) {
   const { w } = SPECIES.spruce, cx = w / 2;
   bark(ctx, cx, 1024, cx, 840, 22, 14, '#2e231b', '#3e3024');
-  // núcleo oscuro detrás de las ramas (sin franjas claras en el centro)
-  ctx.fillStyle = hsl(150, 30, 7);
-  ctx.beginPath(); ctx.moveTo(cx, 40); ctx.lineTo(cx + 46, 900); ctx.lineTo(cx - 46, 900); ctx.closePath(); ctx.fill();
   const tiers = [];
   let y = 26;
-  while (y < 930) { tiers.push(y); y += 14 + rnd() * 12 + (y / 930) * 12; }
+  while (y < 930) { tiers.push({ y, half: (14 + (y - 26) / 904 * 166) * (0.8 + rnd() * 0.4) }); y += 14 + rnd() * 12 + (y / 930) * 12; }
+  // Núcleo oscuro escalonado detrás de las ramas: mantiene la silueta opaca
+  // también de lejos (en las versiones reducidas de la textura las agujas
+  // finas se diluyen y el abeto quedaba como una espiga angosta).
+  ctx.fillStyle = hsl(150, 30, 8);
+  ctx.beginPath(); ctx.moveTo(cx, 30);
+  for (const t of tiers) { ctx.lineTo(cx + t.half * 0.7, t.y + t.half * 0.15 + 8); ctx.lineTo(cx + t.half * 0.42, t.y + t.half * 0.15 + 16); }
+  for (let i = tiers.length - 1; i >= 0; i--) { const t = tiers[i]; ctx.lineTo(cx - t.half * 0.42, t.y + t.half * 0.15 + 16); ctx.lineTo(cx - t.half * 0.7, t.y + t.half * 0.15 + 8); }
+  ctx.closePath(); ctx.fill();
   // Cada piso es una rama gruesa y colgante hecha de agujas cortas.
   // Se dibuja de abajo hacia arriba: las ramas altas caen sobre las de abajo.
   for (let i = tiers.length - 1; i >= 0; i--) {
-    const ty = tiers[i], f = (ty - 26) / 904;
-    const half = (14 + f * 166) * (0.8 + rnd() * 0.4);
+    const ty = tiers[i].y, f = (ty - 26) / 904, half = tiers[i].half;
     const n = 70 + Math.floor(330 * f);
     for (let pass = 0; pass < 2; pass++) {            // 0 = capa en sombra, 1 = capa iluminada
       for (let k = 0; k < (pass ? n : n * 0.7); k++) {
@@ -95,24 +99,30 @@ function paintSpruce(ctx, rnd) {
 
 function paintPine(ctx, rnd) {
   const { w } = SPECIES.pine, cx = w / 2;
-  bark(ctx, cx, 1024, cx + 4, 300, 30, 13, '#4a3b30', '#b8693c');
+  bark(ctx, cx, 1024, cx + 4, 220, 34, 12, '#4a3b30', '#b8693c');
   ctx.strokeStyle = 'rgba(30,18,10,0.55)'; ctx.lineWidth = 1.2;
-  for (let k = 0; k < 50; k++) { const yy = 420 + rnd() * 600; ctx.beginPath(); ctx.moveTo(cx - 10 + rnd() * 20, yy); ctx.lineTo(cx - 10 + rnd() * 20, yy + 8 + rnd() * 20); ctx.stroke(); }
+  for (let k = 0; k < 40; k++) { const yy = 700 + rnd() * 320; ctx.beginPath(); ctx.moveTo(cx - 12 + rnd() * 24, yy); ctx.lineTo(cx - 12 + rnd() * 24, yy + 8 + rnd() * 20); ctx.stroke(); }
+  // Copa ovalada e irregular que baja hasta ~3/4 de la altura (tronco
+  // visible ~27 %): angosta arriba, ancha al medio, alternando lados.
   const clumps = [];
-  for (let k = 0; k < 12; k++) {
-    const f = k / 11;
-    const rx = 55 + rnd() * 45;
-    clumps.push({ x: cx + (rnd() - 0.5) * 300 * (0.35 + 0.65 * f), y: 70 + f * 400 + (rnd() - 0.5) * 40, rx, ry: rx * (0.5 + rnd() * 0.2), d: rnd() });
+  for (let k = 0; k < 22; k++) {
+    const f = k / 21;                                  // 0 arriba, 1 abajo
+    const rx = 46 + rnd() * 38 + 14 * Math.sin(f * Math.PI);
+    const env = 205 * Math.sin(0.35 + f * 2.25);       // media anchura de la copa
+    const side = k % 3 === 2 ? 0 : k % 2 ? 1 : -1;
+    const x = cx + side * (0.3 + 0.7 * rnd()) * env * 0.85 + (rnd() - 0.5) * 30;
+    clumps.push({ x: Math.max(rx + 18, Math.min(w - rx - 18, x)), y: 72 + f * 600 + (rnd() - 0.5) * 44, rx, ry: rx * (0.5 + rnd() * 0.2), d: rnd() });
   }
   ctx.lineCap = 'round';
   for (const c of clumps) {
     ctx.strokeStyle = '#6b4128'; ctx.lineWidth = 5 + rnd() * 4;
-    ctx.beginPath(); ctx.moveTo(cx + 2, Math.min(560, c.y + 150 + rnd() * 50)); ctx.quadraticCurveTo((cx + c.x) / 2, c.y + 50, c.x, c.y + 8); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx + 2, Math.min(740, c.y + 90 + rnd() * 50)); ctx.quadraticCurveTo((cx + c.x) / 2, c.y + 40, c.x, c.y + 8); ctx.stroke();
   }
   clumps.sort((a, b) => a.d - b.d);
   for (const c of clumps) {
+    const area = (c.rx / 75) * (c.rx / 75);
     for (let pass = 0; pass < 2; pass++) {
-      const n = pass ? 380 : 220;
+      const n = (pass ? 380 : 220) * area;
       for (let i = 0; i < n; i++) {
         const a = rnd() * Math.PI * 2, rr = Math.sqrt(rnd());
         const x = c.x + Math.cos(a) * rr * c.rx, y = c.y + Math.sin(a) * rr * c.ry + (pass ? 0 : c.ry * 0.25);
@@ -129,19 +139,20 @@ function paintPine(ctx, rnd) {
 
 function paintOak(ctx, rnd) {
   const { w } = SPECIES.oak, cx = w / 2;
-  bark(ctx, cx, 1024, cx - 6, 600, 40, 22, '#3a2c22', '#5a4636');
+  bark(ctx, cx, 1024, cx - 6, 680, 46, 26, '#3a2c22', '#5a4636');
   // ramas principales
   ctx.lineCap = 'round';
-  const forks = [[-150, 330], [-60, 230], [40, 200], [140, 310], [-200, 470], [190, 450]];
+  const forks = [[-150, 400], [-60, 300], [40, 270], [140, 380], [-200, 540], [190, 520]];
   for (const [dx, y] of forks) {
     ctx.strokeStyle = '#4a382b'; ctx.lineWidth = 9 + rnd() * 6;
-    ctx.beginPath(); ctx.moveTo(cx - 4, 640); ctx.quadraticCurveTo(cx + dx * 0.4, (640 + y) / 2, cx + dx, y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx - 4, 720); ctx.quadraticCurveTo(cx + dx * 0.4, (720 + y) / 2, cx + dx, y); ctx.stroke();
   }
-  // copa: racimos ordenados del fondo (oscuros) al frente (claros)
+  // copa: racimos ordenados del fondo (oscuros) al frente (claros); baja
+  // hasta ~70 % de la altura para que el tronco no quede como un palo largo
   const clusters = [];
-  for (let k = 0; k < 38; k++) {
+  for (let k = 0; k < 40; k++) {
     const a = rnd() * Math.PI * 2, rr = Math.sqrt(rnd());
-    clusters.push({ x: cx + Math.cos(a) * rr * 235, y: 330 + Math.sin(a) * rr * 260, r: 48 + rnd() * 52, d: rnd() });
+    clusters.push({ x: cx + Math.cos(a) * rr * 235, y: 410 + Math.sin(a) * rr * 280, r: 48 + rnd() * 52, d: rnd() });
   }
   clusters.sort((a, b) => a.d - b.d);
   for (const c of clusters) {
@@ -151,7 +162,7 @@ function paintOak(ctx, rnd) {
   ctx.globalCompositeOperation = 'destination-out';
   for (let k = 0; k < 26; k++) {
     const a = rnd() * Math.PI * 2, rr = 0.35 + rnd() * 0.6;
-    ctx.beginPath(); ctx.ellipse(cx + Math.cos(a) * rr * 230, 330 + Math.sin(a) * rr * 250, 4 + rnd() * 9, 3 + rnd() * 7, rnd() * 3, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cx + Math.cos(a) * rr * 230, 410 + Math.sin(a) * rr * 270, 4 + rnd() * 9, 3 + rnd() * 7, rnd() * 3, 0, Math.PI * 2); ctx.fill();
   }
   ctx.globalCompositeOperation = 'source-over';
 }
