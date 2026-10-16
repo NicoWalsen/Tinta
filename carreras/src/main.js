@@ -11,7 +11,7 @@ import { Vehicle, collideCars } from './vehicle.js';
 import { AIDriver } from './ai.js';
 import { RaceState, formatTime } from './race.js';
 import { World } from './world.js';
-import { createCar } from './carModel.js';
+import { createCar, setSharedCarEnvMap } from './carModel.js';
 import { Effects } from './effects.js';
 import { CameraRig, CAMERA_MODES } from './camera.js';
 import { Input } from './input.js';
@@ -110,7 +110,7 @@ function resize() {
   camera.updateProjectionMatrix();
 }
 function applyViewOffset() {
-  if (state === 'menu' && viewW > 720) camera.setViewOffset(viewW, viewH, -viewW * 0.2, 0, viewW, viewH);
+  if (state === 'menu' && viewW > 720) camera.setViewOffset(viewW, viewH, -viewW * 0.22, 0, viewW, viewH);
   else camera.clearViewOffset();
 }
 
@@ -162,6 +162,28 @@ function buildEnvironment() {
   pmrem.dispose();
 }
 
+// Reflejos de los autos: una foto de 360° del circuito (árboles, montañas,
+// cielo) tomada una vez al cargar, sin los autos ni el disco solar.
+function buildCarReflections() {
+  const b = track.bounds;
+  const at = new THREE.Vector3(b.cx, world.avgY + 28, b.cz);
+  const cubeRT = new THREE.WebGLCubeRenderTarget(256, { type: THREE.HalfFloatType });
+  const cubeCam = new THREE.CubeCamera(1, 9000, cubeRT);
+  cubeCam.position.copy(at);
+  for (const m of models) m.root.visible = false;
+  sky.position.copy(at);
+  skyU.showSunDisc.value = 0;
+  cubeCam.update(renderer, scene);
+  skyU.showSunDisc.value = 1;
+  for (const m of models) m.root.visible = true;
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const env = pmrem.fromCubemap(cubeRT.texture).texture;
+  pmrem.dispose();
+  cubeRT.dispose();
+  setSharedCarEnvMap(env);
+  for (const m of models) m.setEnvMap(env);
+}
+
 // La sombra del sol cubre ~110 m alrededor del auto y se ajusta a la grilla
 // de texels para que no "tiemble" al moverse.
 const lightRight = new THREE.Vector3().crossVectors(sunDir, new THREE.Vector3(0, 1, 0)).normalize();
@@ -195,6 +217,20 @@ let time = 0;
 function playerColor() {
   return (PLAYER_COLORS.find(c => c.id === settings.color) || PLAYER_COLORS[0]).hex;
 }
+const css = (hex) => '#' + hex.toString(16).padStart(6, '0');
+// Decoración del auto del jugador según el color elegido (número 7)
+function playerLivery(hex) {
+  const light = ['amarillo', 'blanco'].includes(settings.color);
+  return {
+    base: css(hex), number: '7',
+    stripe: light ? '#111111' : '#f4f3ee',
+    accent: settings.color === 'rojo' ? '#111111' : '#e8322b',
+    ink: light ? '#111111' : '#ffffff',
+  };
+}
+function driverLivery(d) {
+  return { base: css(d.color), stripe: d.stripe, accent: d.accent, number: d.number, ink: d.ink };
+}
 
 async function boot() {
   const bar = $('lBar'), txt = $('lText');
@@ -220,13 +256,14 @@ async function boot() {
   await nextFrame();
   const shadowTex = makeContactShadow();
   let aiIdx = 0;
-  const calipers = [0xd01818, 0xf2c200, 0x1d4fb8, 0x222222, 0xd01818, 0xf07000];
   for (let slot = 0; slot < RACE.cars; slot++) {
     const v = new Vehicle();
     const isPlayer = slot === RACE.playerSlot;
     const d = isPlayer ? null : DRIVERS[aiIdx++];
     const color = isPlayer ? playerColor() : d.color;
-    const model = createCar({ color, shadowTex, rim: slot % 2 ? 'dark' : 'silver', caliper: calipers[slot] });
+    const model = isPlayer
+      ? createCar({ livery: playerLivery(color), shadowTex, rim: 'dark', caliper: 0xf2c200 })
+      : createCar({ livery: driverLivery(d), shadowTex, rim: d.rim, caliper: d.caliper });
     scene.add(model.root);
     cars.push(v); models.push(model);
     names.set(v, { short: isPlayer ? 'TÚ' : d.name.toUpperCase(), color });
@@ -253,13 +290,14 @@ async function boot() {
   progress(0.86, 'Iluminando el cielo…');
   await nextFrame();
   buildEnvironment();
+  buildCarReflections();
   updateSun(player.x, player.y, player.z);
 
   progress(0.94, 'Compilando sombreadores…');
   await nextFrame();
   state = 'menu';
   resize();
-  rig.orbit(0, player);
+  rig.orbit(0, player, 7.8);
   try {
     if (renderer.compileAsync) await renderer.compileAsync(scene, camera);
     else renderer.compile(scene, camera);
@@ -282,7 +320,7 @@ function setupMenu() {
     b.setAttribute('aria-label', 'Color ' + c.label);
     b.addEventListener('click', () => {
       settings.color = c.id; store.set('color', c.id);
-      playerModel.paint.color.setHex(c.hex);
+      playerModel.setLivery(playerLivery(c.hex));
       names.get(player).color = c.hex; carColors.set(player, c.hex);
       refreshMenu();
     });
@@ -540,7 +578,7 @@ function loop(now) {
 
   if (!paused) {
     if (state === 'menu') {
-      rig.orbit(time, player);
+      rig.orbit(time, player, 7.8);
     } else if (state === 'countdown') {
       input.update(dt);
       countdownT += dt;

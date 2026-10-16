@@ -60,13 +60,14 @@ export const RACE = {
   gridLateral: 2.6,
 };
 
+// Rivales y su decoración de competición (franjas, acento, número, llantas, pinzas)
 export const DRIVERS = [
-  { name: 'Vega', color: 0x1f5fd6 },
-  { name: 'Okafor', color: 0x16181c },
-  { name: 'Lindqvist', color: 0xf2f2ee },
-  { name: 'Tanaka', color: 0xf0b313 },
-  { name: 'Moreau', color: 0x2f8f4e },
-  { name: 'Salas', color: 0x7a2fd0 },
+  { name: 'Vega', color: 0x1f5fd6, stripe: '#f4f3ee', accent: '#e8322b', number: '11', ink: '#ffffff', rim: 'silver', caliper: 0xd01818 },
+  { name: 'Okafor', color: 0x16181c, stripe: '#c8a14a', accent: '#c8a14a', number: '23', ink: '#c8a14a', rim: 'gold', caliper: 0xc8a14a },
+  { name: 'Lindqvist', color: 0xf2f2ee, stripe: '#1d4fb8', accent: '#e8322b', number: '4', ink: '#1d1d1f', rim: 'dark', caliper: 0x1d4fb8 },
+  { name: 'Tanaka', color: 0xf0b313, stripe: '#111111', accent: '#111111', number: '88', ink: '#111111', rim: 'dark', caliper: 0x222222 },
+  { name: 'Moreau', color: 0x2f8f4e, stripe: '#f2c200', accent: '#f4f3ee', number: '31', ink: '#ffffff', rim: 'silver', caliper: 0xf2c200 },
+  { name: 'Salas', color: 0x7a2fd0, stripe: '#f4f3ee', accent: '#35d0c2', number: '5', ink: '#ffffff', rim: 'dark', caliper: 0xf07000 },
 ];
 
 export const PLAYER_COLORS = [
