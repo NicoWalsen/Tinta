@@ -169,6 +169,16 @@ export class AudioEngine {
     this.curbGain = ctx.createGain(); this.curbGain.gain.value = 0;
     this.curbOsc.connect(this.curbF); this.curbF.connect(this.curbGain); this.curbGain.connect(this.master);
     this.curbOsc.start();
+    // Turbo: soplido de aire + silbido del compresor (el "pssh" de la válvula va aparte)
+    this.boostSrc = loopNoise();
+    this.boostF = ctx.createBiquadFilter(); this.boostF.type = 'bandpass'; this.boostF.frequency.value = 1400; this.boostF.Q.value = 0.9;
+    this.boostGain = ctx.createGain(); this.boostGain.gain.value = 0;
+    this.boostSrc.connect(this.boostF); this.boostF.connect(this.boostGain); this.boostGain.connect(this.master);
+    this.whistle = ctx.createOscillator(); this.whistle.type = 'sine'; this.whistle.frequency.value = 2600;
+    this.whistleGain = ctx.createGain(); this.whistleGain.gain.value = 0;
+    this.whistle.connect(this.whistleGain); this.whistleGain.connect(this.master);
+    this.whistle.start();
+    this.wasBoosting = false;
     this.ready = true;
     this.popCooldown = 0;
     this.rough = 0;
@@ -188,7 +198,8 @@ export class AudioEngine {
   silence() {
     if (!this.ready) return;
     const now = this.ctx.currentTime;
-    for (const g of [this.player.out.gain, this.rival.out.gain, this.tireGain.gain, this.windGain.gain, this.grassGain.gain, this.curbGain.gain]) g.setTargetAtTime(0, now, 0.05);
+    for (const g of [this.player.out.gain, this.rival.out.gain, this.tireGain.gain, this.windGain.gain, this.grassGain.gain, this.curbGain.gain, this.boostGain.gain, this.whistleGain.gain]) g.setTargetAtTime(0, now, 0.05);
+    this.wasBoosting = false;
   }
 
   update(dt, car, rival, listener) {
@@ -223,6 +234,14 @@ export class AudioEngine {
     const curbK = car.surf.filter(s => s === 1).length / 4;
     this.curbOsc.frequency.setTargetAtTime(Math.max(8, car.speed / 1.3), now, 0.03);
     this.curbGain.gain.setTargetAtTime(curbK * Math.min(1, car.speed / 12) * 0.35, now, 0.03);
+    // Turbo
+    const b = car.boost || 0;
+    this.boostGain.gain.setTargetAtTime(b * 0.3, now, 0.06);
+    this.boostF.frequency.setTargetAtTime(1100 + b * 900 + car.speed * 6, now, 0.1);
+    this.whistle.frequency.setTargetAtTime(2300 + b * 1400 + rpm * 0.12, now, 0.15);
+    this.whistleGain.gain.setTargetAtTime(b * 0.035, now, 0.12);
+    if (this.wasBoosting && !car.boosting) this.blowOff();
+    this.wasBoosting = car.boosting;
 
     // Rival más cercano (volumen por distancia, paneo estéreo y efecto Doppler)
     if (rival && listener) {
@@ -260,6 +279,20 @@ export class AudioEngine {
       s.connect(f); f.connect(g); g.connect(this.master);
       s.start(t, Math.random()); s.stop(t + 0.08);
     }
+  }
+
+  // Válvula de descarga del turbo al soltarlo: "pssh" agudo que se apaga
+  blowOff() {
+    if (!this.ready) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const s = ctx.createBufferSource(); s.buffer = this.noise;
+    const f = ctx.createBiquadFilter(); f.type = 'highpass';
+    f.frequency.setValueAtTime(2600, t); f.frequency.exponentialRampToValueAtTime(900, t + 0.4);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.3, t + 0.015);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
+    s.connect(f); f.connect(g); g.connect(this.master);
+    s.start(t, Math.random()); s.stop(t + 0.5);
   }
 
   impact(strength) {

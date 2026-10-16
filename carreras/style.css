@@ -89,6 +89,13 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 .unit { font-size: 14px; font-weight: 700; letter-spacing: 0.1em; color: var(--steel); padding-bottom: 2px; }
 .gear { display: grid; justify-items: center; margin-left: 10px; }
 .gear b { font-size: 36px; font-weight: 800; font-style: italic; line-height: 0.85; }
+.turbo { display: flex; align-items: center; gap: 7px; }
+.tbar { position: relative; width: 150px; height: 7px; overflow: hidden; background: rgba(241, 239, 232, 0.14); transform: skewX(-18deg); }
+.tbar i { position: absolute; inset: 0; background: var(--shift); transform-origin: 0 50%; }
+.turbo.active .lbl { color: #9ad6ff; }
+.turbo.active .tbar i { background: #9ad6ff; }
+.turbo.low .tbar i { background: var(--amber); }
+#hud[data-turbo="off"] .turbo, #controls[data-turbo="off"] .turbo-btn { display: none; }
 
 .msg {
   position: absolute; top: 36%; left: 50%; transform: translate(-50%, -50%) scale(0.92);
@@ -122,11 +129,22 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 #controls[data-mode="deslizar"] .slidehint, #controls[data-mode="inclinar"] .tilthint { display: block; }
 .pedals {
   position: absolute; right: calc(var(--sr) + 16px); bottom: calc(var(--sb) + 14px);
-  display: grid; grid-template-columns: auto auto; grid-template-rows: auto auto; gap: 10px 12px; align-items: end;
+  display: grid; grid-template-columns: auto auto; grid-template-rows: auto auto auto; gap: 10px 12px; align-items: end;
   pointer-events: auto;
 }
+/* Turbo encima del acelerador; el relleno muestra la energía (--e de 0 a 1) */
+.turbo-btn {
+  grid-column: 2; grid-row: 1; position: relative; overflow: hidden; width: 88px; height: 48px; border-radius: 12px;
+  display: grid; place-items: center;
+  font-family: var(--display); font-weight: 800; font-style: italic; font-size: 15px; letter-spacing: 0.12em;
+}
+.turbo-btn i { position: absolute; inset: 0; background: rgba(78, 163, 255, 0.34); transform-origin: 0 50%; transform: scaleX(var(--e, 1)); pointer-events: none; }
+.turbo-btn span { position: relative; pointer-events: none; }
+.turbo-btn.on { background-color: rgba(78, 163, 255, 0.3); border-color: #9ad6ff; }
+.turbo-btn.on i { background: rgba(120, 200, 255, 0.6); }
+.turbo-btn.empty { opacity: 0.5; }
 .hand {
-  grid-column: 1; grid-row: 1; padding: 9px 8px; border-radius: 10px;
+  grid-column: 1; grid-row: 2; padding: 9px 8px; border-radius: 10px;
   font-family: var(--display); font-weight: 700; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase;
 }
 .pedal {
@@ -135,8 +153,8 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
   background-image: repeating-linear-gradient(0deg, transparent 0 11px, rgba(241, 239, 232, 0.09) 11px 13px);
 }
 .pedal span { pointer-events: none; }
-.brake { grid-column: 1; grid-row: 2; height: 112px; }
-.gas { grid-column: 2; grid-row: 1 / span 2; height: 164px; }
+.brake { grid-column: 1; grid-row: 3; height: 112px; }
+.gas { grid-column: 2; grid-row: 2 / span 2; height: 150px; }
 .gas.on { background-color: rgba(55, 214, 122, 0.38); }
 .brake.on { background-color: rgba(232, 50, 43, 0.45); }
 .kbhint { display: none; }
@@ -223,8 +241,10 @@ td.fl { color: var(--fl); font-weight: 600; }
   .opt { gap: 8px; }
   .menu-opts { gap: 7px; }
   .arrow { width: 82px; height: 82px; }
-  .gas { height: 146px; }
+  .gas { height: 132px; }
   .brake { height: 98px; }
+  .turbo-btn { height: 42px; }
+  #minimap { width: 92px; height: 92px; }
   .speed { font-size: 58px; }
   #tower li { height: 17px; font-size: 12px; }
 }

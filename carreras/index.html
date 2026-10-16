@@ -64,6 +64,7 @@
       <span class="unit">KM/H</span>
       <span class="gear"><span class="lbl">MARCHA</span><b id="hGear">N</b></span>
     </div>
+    <div class="turbo" id="hTurbo"><span class="lbl">TURBO</span><span class="tbar"><i id="hTurboFill"></i></span></div>
   </div>
   <div id="msg" class="msg" aria-live="polite"></div>
   <div id="toast" class="toast" aria-live="polite"></div>
@@ -83,6 +84,7 @@
     <div class="hint tilthint">Inclina el iPhone como un volante</div>
   </div>
   <div class="pedals">
+    <button class="ctl turbo-btn" data-ctl="boost" aria-label="Turbo"><i aria-hidden="true"></i><span>TURBO</span></button>
     <button class="ctl hand" data-ctl="hand">Freno de mano</button>
     <button class="ctl pedal brake" data-ctl="brake" aria-label="Freno"><span>FRENO</span></button>
     <button class="ctl pedal gas" data-ctl="gas" aria-label="Acelerador"><span>ACELERAR</span></button>
@@ -122,6 +124,10 @@
       <div class="opt"><span class="k">Ayudas</span>
         <div class="seg" data-opt="assists">
           <button data-v="true">ABS · TC · ESC</button><button data-v="false">Sin ayudas</button>
+        </div></div>
+      <div class="opt"><span class="k">Turbo</span>
+        <div class="seg" data-opt="turbo">
+          <button data-v="true">Sí</button><button data-v="false">No</button>
         </div></div>
       <div class="opt"><span class="k">Sonido</span>
         <div class="seg" data-opt="sound">

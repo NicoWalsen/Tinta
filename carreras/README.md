@@ -22,11 +22,17 @@ rama `main`, carpeta `/ (root)`. El juego queda en
 | Deslizar el dedo en la mitad izquierda (modo Deslizar) | Girar con precisión |
 | Inclinar el iPhone (modo Inclinar) | Girar como un volante |
 | ACELERAR / FRENO | Pedales (puedes deslizar el dedo de uno al otro) |
+| TURBO (encima del acelerador) | Potencia extra mientras dure la energía; también acelera |
 | Freno de mano | Derrapar |
 | Mantener FRENO detenido | Marcha atrás |
 
-Teclado: flechas o WASD, espacio (freno de mano), C (cámara), R (volver a la pista), P (pausa).
-También funciona con mandos de PlayStation, Xbox o MFi.
+**Turbo:** la barra llena dura unos 5 s a fondo y se recarga al frenar (y muy lento
+sola). Solo gasta la potencia que llega al piso: si el control de tracción la
+recorta, no se desperdicia. Los rivales también lo usan. Se puede desactivar en
+el menú (Turbo: No).
+
+Teclado: flechas o WASD, Shift o N (turbo), espacio (freno de mano), C (cámara), R (volver a la pista), P (pausa).
+También funciona con mandos de PlayStation, Xbox o MFi (LB: turbo).
 
 ## Estructura
 

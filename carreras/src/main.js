@@ -36,6 +36,7 @@ const settings = {
   color: store.get('color', 'rojo'),
   quality: store.get('quality', 'auto'),
   assists: store.get('assists', true),
+  turbo: store.get('turbo', true),
   sound: store.get('sound', true),
   camera: store.get('camera', 0),
 };
@@ -225,11 +226,11 @@ let track, world, race, hud, effects, rig, input, audio;
 const cars = [], models = [], ais = [];
 const names = new Map(), carColors = new Map();
 let player, playerModel, playerAI, playerEntry;
-const playerAIInput = { throttle: 0, brake: 0, steer: 0, handbrake: false };
+const playerAIInput = { throttle: 0, brake: 0, steer: 0, handbrake: false, boost: false };
 let countdownT = 0, lightsOn = 0, goAt = 0, grid = [];
 let finishT = 0, resultsShown = false;
 let respawnCooldown = 0, stuckT = 0, wrongWarn = 0;
-let time = 0;
+let time = 0, frameN = 0;
 
 function playerColor() {
   return (PLAYER_COLORS.find(c => c.id === settings.color) || PLAYER_COLORS[0]).hex;
@@ -359,13 +360,19 @@ function setupMenu() {
   $('bCam').addEventListener('click', cycleCamera);
   $('bReset').addEventListener('click', respawn);
   $('bPause').addEventListener('click', togglePause);
+  applyTurboUI();
   refreshMenu();
+}
+
+// Muestra u oculta el botón y la barra del turbo según el ajuste del menú.
+function applyTurboUI() {
+  $('hud').dataset.turbo = $('controls').dataset.turbo = settings.turbo ? 'on' : 'off';
 }
 
 async function selectOption(opt, raw) {
   let v = raw;
   if (opt === 'laps') v = parseInt(raw, 10);
-  if (opt === 'assists' || opt === 'sound') v = raw === 'true';
+  if (opt === 'assists' || opt === 'sound' || opt === 'turbo') v = raw === 'true';
   if (opt === 'control' && v === 'inclinar') {
     const ok = await input.enableTilt();
     if (!ok) {
@@ -379,6 +386,7 @@ async function selectOption(opt, raw) {
   if (opt === 'control') input.setMode(v);
   if (opt === 'quality') applyQuality();
   if (opt === 'sound') audio.setEnabled(v);
+  if (opt === 'turbo') applyTurboUI();
   if (opt === 'laps') race.laps = v;
   refreshMenu();
 }
@@ -451,7 +459,9 @@ function startRace() {
   race.grid();
   playerEntry = race.entries[RACE.playerSlot];
   const base = DIFFICULTY[settings.difficulty].skill;
-  ais.forEach((ai, i) => { ai.baseSkill = ai.skill = base + (i - 2) * 0.007; ai.stuck = 0; ai.avoid = 0; });
+  ais.forEach((ai, i) => { ai.baseSkill = ai.skill = base + (i - 2) * 0.007; ai.stuck = 0; ai.avoid = 0; ai.boosting = false; });
+  for (const c of cars) c.resetTurbo();      // barra llena; se habilita al largar
+  playerAIInput.boost = false;
   const a = settings.assists;
   player.assists = { abs: a, tcs: a, esc: a, steer: true };
   player.input = input.state;
@@ -615,6 +625,14 @@ function loop(now) {
         input.calibrate();
         race.time = 0;
         for (const e of race.entries) e.lapStart = 0;
+        for (const c of cars) c.turboAllowed = settings.turbo;
+        if (settings.turbo) {
+          const tips = store.get('turboTips', 0);
+          if (tips < 3) {
+            store.set('turboTips', tips + 1);
+            hud.toast(isTouch ? 'Mantén TURBO · se recarga frenando' : 'Mantén Shift para el turbo · se recarga frenando', 4);
+          }
+        }
       }
       rig.follow(dt, player);
     } else if (state === 'race' || state === 'finished') {
@@ -649,7 +667,9 @@ function loop(now) {
       for (const c of cars) if (c !== player) { const d = Math.hypot(c.x - player.x, c.z - player.z); if (d < rd) { rd = d; rival = c; } }
       audio.update(dt, player, rd < 80 ? rival : null, player);
       hud.update(dt, race, playerEntry, player, names);
-      if ((Math.round(time * 60) & 1) === 0) hud.drawMinimap(cars, player, carColors);
+      // cuadro por medio (contador de cuadros: con el tiempo, a 30 FPS fijos
+      // —modo de bajo consumo del iPhone— la paridad no cambiaba nunca)
+      if ((++frameN & 1) === 0) hud.drawMinimap(cars, player, carColors);
     }
     effects.update(dt, camera, viewH * dpr);
     for (let i = 0; i < cars.length; i++) models[i].update(cars[i]);

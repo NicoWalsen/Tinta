@@ -1,4 +1,5 @@
-// Efectos: marcas de derrape, humo/polvo, chispas y llamaradas del escape.
+// Efectos: marcas de derrape, humo/polvo, chispas y llamaradas del escape
+// (petardeos al cambiar de marcha y llamas del turbo).
 import * as THREE from 'three';
 
 // ---------------------------------------------------------------- marcas de derrape
@@ -172,7 +173,7 @@ export class Effects {
   constructor(scene, tex) {
     this.skids = new Skidmarks(scene);
     this.smoke = new Particles(scene, 600, tex.smoke, false);
-    this.sparks = new Particles(scene, 220, tex.spark, true);
+    this.sparks = new Particles(scene, 380, tex.spark, true);
     this.light = 1;
     this.emitAcc = new Map();
   }
@@ -227,6 +228,22 @@ export class Effects {
         }
       }
       car.shiftEvent = 0;
+    }
+    // Llamas del turbo: núcleo azul y llama exterior anaranjada en cada escape
+    if (car.boost > 0.2) {
+      const b = car.boost;
+      for (const ex of [-0.36, 0.36]) {
+        const x = car.x - fx * 2.3 + lx * ex, z = car.z - fz * 2.3 + lz * ex;
+        this.sparks.emit({
+          x, y: car.y + 0.33, z, vx: car.vx - fx * 10, vy: 0.2, vz: car.vz - fz * 10,
+          life: 0.05 + Math.random() * 0.03, size0: 0.28 * b, size1: 0.1, alpha: 1, r: 3, g: 8, b: 30, drag: 3, fadeIn: 0.01,
+        });
+        const sp = 7 + Math.random() * 4;
+        this.sparks.emit({
+          x: x - fx * 0.25, y: car.y + 0.33, z: z - fz * 0.25, vx: car.vx - fx * sp, vy: 0.3 + Math.random() * 0.4, vz: car.vz - fz * sp,
+          life: 0.08 + Math.random() * 0.05, size0: 0.22 * b, size1: 0.5 * b, alpha: 0.75, r: 18, g: 6, b: 1.6, drag: 3, fadeIn: 0.02,
+        });
+      }
     }
     // Chispas en choques
     if (car.impact > 2.5) {
