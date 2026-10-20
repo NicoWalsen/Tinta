@@ -4,20 +4,37 @@
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const wrap = (a) => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
 
+// Curva del volante: suave cerca del centro y más directa hacia el tope, para
+// que todo el recorrido sea útil (la goma da mucho agarre con poco ángulo).
+export const STEER_EXPO = 0.3;
+export const shapeSteer = (v) => v * (STEER_EXPO + (1 - STEER_EXPO) * Math.abs(v));
+
+// Sensibilidad del volante (menú): grados de inclinación para girar a fondo,
+// rapidez de las flechas y recorrido del dedo en modo deslizar.
+export const STEER_SENS = {
+  suave: { tilt: 34, rate: 0.8, slide: 1.3 },
+  normal: { tilt: 27, rate: 1, slide: 1 },
+  directo: { tilt: 21, rate: 1.25, slide: 0.8 },
+};
+
 export class Input {
   constructor(root, callbacks = {}) {
     this.root = root;
     this.cb = callbacks;
     this.mode = 'botones';          // 'botones' | 'deslizar' | 'inclinar'
     this.state = { steer: 0, throttle: 0, brake: 0, handbrake: false, boost: false };
+    this.steerRaw = 0;              // volante antes de la curva (shapeSteer)
+    this.sens = STEER_SENS.normal;
     this.touch = { left: false, right: false, gas: false, brake: false, hand: false, boost: false, slide: 0, sliding: false };
     this.keys = new Set();
     this.pointers = new Map();
-    this.tilt = { available: false, active: false, angle: 0, zero: 0, raw: 0, has: false };
+    this.tilt = { available: false, active: false, angle: 0, zero: 0, raw: 0, has: false, fused: false };
     this.pad = { steer: 0, throttle: 0, brake: 0, hand: false, boost: false, active: false, prevButtons: [] };
     this.enabled = false;
     this._bind();
   }
+
+  setSensitivity(name) { this.sens = STEER_SENS[name] || STEER_SENS.normal; }
 
   setMode(mode) {
     this.mode = mode;
@@ -40,7 +57,7 @@ export class Input {
       if (!p) return;
       e.preventDefault();
       if (p.ctl === 'steer') {
-        const w = Math.min(window.innerWidth * 0.16, 110);
+        const w = Math.min(window.innerWidth * 0.16, 110) * this.sens.slide;
         this.touch.slide = clamp((e.clientX - p.x0) / w, -1, 1);
       } else {
         // permite deslizar el dedo entre acelerador y freno
@@ -123,8 +140,14 @@ export class Input {
   }
 
   _onMotion(e) {
-    const g = e.accelerationIncludingGravity;
-    if (!g || g.x === null) return;
+    const gi = e.accelerationIncludingGravity;
+    if (!gi || gi.x === null) return;
+    // Gravedad "pura": el iPhone separa (con el giroscopio) la aceleración de
+    // las manos en e.acceleration. Restándola, mover el teléfono sin girarlo
+    // ya no se confunde con girar el volante (1 m/s² eran ~6° falsos).
+    const la = e.acceleration;
+    const fused = !!la && typeof la.x === 'number' && typeof la.y === 'number';
+    const g = { x: gi.x - (fused ? la.x : 0), y: gi.y - (fused ? la.y : 0) };
     const ang = (screen.orientation && typeof screen.orientation.angle === 'number') ? screen.orientation.angle : (window.orientation || 0);
     const a = ((ang % 360) + 360) % 360;
     let gr, gu;
@@ -136,10 +159,11 @@ export class Input {
     const raw = Math.atan2(gr, gu);
     if (!this.tilt.has) { this.tilt.zero = raw; this.tilt.has = true; }
     this.tilt.raw = raw;
+    this.tilt.fused = fused;
     this.tilt.angle = -wrap(raw - this.tilt.zero);
   }
 
-  calibrate() { if (this.tilt.has) this.tilt.zero = this.tilt.raw; }
+  calibrate() { if (this.tilt.has) { this.tilt.zero = this.tilt.raw; this.tilt.angle = 0; } }
 
   _pollPad() {
     const pads = navigator.getGamepads ? navigator.getGamepads() : [];
@@ -148,7 +172,7 @@ export class Input {
     const ax = gp.axes[0] || 0;
     const b = (i) => (gp.buttons[i] ? gp.buttons[i].value : 0);
     const pressed = (i) => !!(gp.buttons[i] && gp.buttons[i].pressed);
-    this.pad.steer = Math.abs(ax) > 0.1 ? Math.sign(ax) * ((Math.abs(ax) - 0.1) / 0.9) ** 1.4 : 0;
+    this.pad.steer = Math.abs(ax) > 0.1 ? Math.sign(ax) * (Math.abs(ax) - 0.1) / 0.9 : 0;   // la curva va en shapeSteer
     this.pad.throttle = Math.max(b(7), b(0));
     this.pad.brake = Math.max(b(6), b(2));
     this.pad.hand = pressed(1) || pressed(5);
@@ -172,21 +196,25 @@ export class Input {
     let steerTarget = 0, analog = false;
     if (this.pad.active && Math.abs(this.pad.steer) > 0.02) { steerTarget = this.pad.steer; analog = true; }
     else if (this.mode === 'inclinar' && this.tilt.available && this.tilt.has) {
+      // zona muerta suave de 1° (sin salto al salir de ella) y tope según la sensibilidad
       const deg = this.tilt.angle * 57.3;
-      const dz = 1.5, full = 24;
-      steerTarget = Math.abs(deg) < dz ? 0 : clamp((deg - Math.sign(deg) * dz) / (full - dz), -1, 1);
+      const dz = 1, full = this.sens.tilt;
+      steerTarget = Math.sign(deg) * clamp((Math.abs(deg) - dz) / (full - dz), 0, 1);
       analog = true;
     } else if (this.mode === 'deslizar' && t.sliding) { steerTarget = t.slide; analog = true; }
     const digital = (t.right || kbRight ? 1 : 0) - (t.left || kbLeft ? 1 : 0);
     if (digital !== 0) { steerTarget = digital; analog = false; }
 
+    let r = this.steerRaw;
     if (analog) {
-      s.steer += (steerTarget - s.steer) * Math.min(1, dt * 14);
+      r += (steerTarget - r) * Math.min(1, dt * 14);
     } else {
-      const rate = steerTarget === 0 ? 5.5 : (Math.sign(steerTarget) !== Math.sign(s.steer) && s.steer !== 0 ? 7 : 3.4);
-      const d = steerTarget - s.steer;
-      s.steer += clamp(d, -rate * dt, rate * dt);
+      const k = this.sens.rate;
+      const rate = steerTarget === 0 ? 5.5 : (Math.sign(steerTarget) !== Math.sign(r) && r !== 0 ? 7 * k : 3.6 * k);
+      r += clamp(steerTarget - r, -rate * dt, rate * dt);
     }
+    this.steerRaw = r;
+    s.steer = shapeSteer(r);
 
     // Pedales (rampa suave para no patinar al tocar la pantalla).
     // El turbo también acelera: se puede deslizar el dedo del acelerador al turbo.
@@ -204,6 +232,7 @@ export class Input {
   reset() {
     this.pointers.clear();
     this._refresh();
+    this.steerRaw = 0;
     Object.assign(this.state, { steer: 0, throttle: 0, brake: 0, handbrake: false, boost: false });
   }
 }

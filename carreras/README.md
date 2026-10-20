@@ -26,6 +26,14 @@ rama `main`, carpeta `/ (root)`. El juego queda en
 | Freno de mano | Derrapar |
 | Mantener FRENO detenido | Marcha atrás |
 
+**Volante (menú: Suave / Normal / Directo):** la dirección es progresiva: el
+tope de giro sigue el ángulo que de verdad hace falta para llegar al límite de
+agarre a cada velocidad, y una curva suaviza el centro, así todo el recorrido
+del volante es útil. Con el giroscopio se usa la gravedad que calcula el iPhone
+combinando giroscopio y acelerómetro, de modo que mover el teléfono sin girarlo
+no cambia la dirección; a fondo son 34° / 27° / 21° de inclinación. El centro se
+calibra al largar y al volver de la pausa.
+
 **Turbo:** la barra llena dura unos 5 s a fondo y se recarga al frenar (y muy lento
 sola). Solo gasta la potencia que llega al piso: si el control de tracción la
 recorta, no se desperdicia. Los rivales también lo usan. Se puede desactivar en
