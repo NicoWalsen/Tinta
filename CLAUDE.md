@@ -15,13 +15,14 @@ Contiene dos proyectos independientes:
   más, y las mediciones con números (tablas antes/después) le resultan claras.
 - Juega en un iPhone 15 Pro Max (932×430 en horizontal) desde un acceso directo en la
   pantalla de inicio. No podemos probar en un iPhone real: decirlo con honestidad.
-- Flujo: trabajar en la rama asignada, subirla y preguntar si abrir el PR; abre el PR
-  solo cuando dice "Adelante" y él hace el merge. Si el PR anterior ya está mergeado,
-  reiniciar la rama desde `main` antes de seguir.
-- Publicación: GitHub Pages desde `main` → `https://nicowalsen.github.io/Tinta/carreras/`
-  (tarda 1–2 min más hasta 10 min de caché). Versión de prueba en claude.ai (privada):
-  https://claude.ai/artifact/KvSNdyQ7dmn4Ph7ovDwwsu — se actualiza publicando el HTML de
-  un solo archivo con esa `url`.
+- **Flujo acordado:** él juega desde **GitHub Pages**, con un acceso directo al juego en
+  su iPhone (`https://nicowalsen.github.io/Tinta/carreras/`, publicado desde `main`).
+  Al terminar un cambio: subir la rama asignada, abrir el PR y **darle el link del PR**.
+  Él hace el merge desde ese link y prueba en el teléfono (tarda 1–2 min en publicarse,
+  más hasta 10 min de caché; cerrar y reabrir el acceso directo). Si el PR anterior ya
+  está mergeado, reiniciar la rama desde `main` antes de seguir.
+- La versión de claude.ai (https://claude.ai/artifact/KvSNdyQ7dmn4Ph7ovDwwsu, privada)
+  es solo una vista previa opcional: no es lo que él usa para jugar.
 
 ## Asfalto GT
 
