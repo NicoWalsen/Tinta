@@ -31,6 +31,7 @@ const store = {
 };
 const settings = {
   control: store.get('control', 'botones'),
+  steering: store.get('steering', 'normal'),
   laps: store.get('laps', 3),
   difficulty: store.get('difficulty', 'normal'),
   color: store.get('color', 'rojo'),
@@ -300,6 +301,7 @@ async function boot() {
   audio.enabled = settings.sound;
   input = new Input($('controls'), { camera: cycleCamera, reset: respawn, pause: togglePause });
   input.setMode(settings.control);
+  input.setSensitivity(settings.steering);
 
   race = new RaceState(track, cars, settings.laps);
   race.grid();
@@ -384,6 +386,7 @@ async function selectOption(opt, raw) {
   settings[opt] = v;
   store.set(opt, v);
   if (opt === 'control') input.setMode(v);
+  if (opt === 'steering') input.setSensitivity(v);
   if (opt === 'quality') applyQuality();
   if (opt === 'sound') audio.setEnabled(v);
   if (opt === 'turbo') applyTurboUI();
@@ -464,6 +467,7 @@ function startRace() {
   playerAIInput.boost = false;
   const a = settings.assists;
   player.assists = { abs: a, tcs: a, esc: a, steer: true };
+  player.humanSteer = !AUTOPILOT;
   player.input = input.state;
   input.reset();
   input.enabled = true;
@@ -487,7 +491,7 @@ function togglePause() {
   $('pause').hidden = !paused;
   input.enabled = !paused;
   input.reset();
-  if (paused) audio.silence(); else audio.resume();
+  if (paused) audio.silence(); else { audio.resume(); input.calibrate(); }   // nuevo centro del giroscopio al volver
 }
 
 function cycleCamera() {
@@ -590,6 +594,7 @@ function frameCars(dt) {
   }
   if (state === 'finished' || (AUTOPILOT && state === 'race')) {
     player.input = playerAIInput;
+    player.humanSteer = false;          // ahora maneja la IA
     playerAI.update(dt, cars, true);
   }
 }

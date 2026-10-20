@@ -37,6 +37,7 @@ export class Vehicle {
     this.steerAngle = 0;
     this.input = { throttle: 0, brake: 0, steer: 0, handbrake: false, boost: false };
     this.assists = { abs: true, tcs: true, esc: true, steer: true };
+    this.humanSteer = false;      // límite de dirección progresivo (lo maneja una persona)
     this.gear = 1;
     this.rpm = spec.idle;
     this.shiftTimer = 0;
@@ -78,11 +79,16 @@ export class Vehicle {
     this.y = this.tp.y;
   }
 
-  // Ángulo máximo de dirección según la velocidad: evita que las
-  // ruedas delanteras pasen su ángulo de deriva óptimo (ayuda de dirección).
+  // Ángulo máximo de dirección según la velocidad (ayuda de dirección).
   maxSteerAt(u) {
     const S = this.spec, L = S.cgToFront + S.cgToRear;
     if (!this.assists.steer) return Math.min(S.maxSteer, Math.atan(L * 22 / Math.max(u * u, 1)) + 0.12);
+    // Persona: sigue el ángulo que de verdad hace falta para llegar al límite
+    // de adherencia (medido en simulación) con un margen de 5–45 %. Antes
+    // sobraba hasta 3 veces a alta velocidad: con el 30 % del volante ya se
+    // llegaba al límite y la dirección era muy nerviosa.
+    if (this.humanSteer) return Math.min(S.maxSteer, Math.atan(L * 12.5 / Math.max(u * u, 1)) + 0.016 + 0.035 / (1 + (u / 25) ** 2));
+    // IA: calcula el ángulo exacto que necesita; el tope solo debe no estorbarla.
     return Math.min(S.maxSteer, Math.atan(L * 13 / Math.max(u * u, 1)) + 0.06);
   }
 
